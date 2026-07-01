@@ -61,7 +61,7 @@ function send(command, payload = null) {
       try {
         iframe.remove();
       } catch (error) {
-        // no-op
+        // iframe cleanup is best-effort
       }
     }, 600);
   });
