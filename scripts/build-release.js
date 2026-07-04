@@ -56,8 +56,13 @@ function minifyFiles(distDir) {
       file,
       "-o",
       file,
+      "--ecma",
+      "5",
       "--compress",
+      "ecma=5,arrows=false",
       "--mangle",
+      "--format",
+      "ecma=5,comments=false",
     ]);
   });
 

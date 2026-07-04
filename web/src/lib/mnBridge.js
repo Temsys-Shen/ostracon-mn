@@ -31,7 +31,7 @@ function ensureBridgeReceiver() {
   };
 }
 
-function send(command, payload = null) {
+function send(command, payload = null, timeoutMs = 5000) {
   ensureBridgeReceiver();
 
   const requestId = nextRequestId();
@@ -43,11 +43,18 @@ function send(command, payload = null) {
   };
 
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      delete window.__MNBridgePending[requestId];
+      reject(new Error(`Bridge 超时: ${command}`));
+    }, timeoutMs);
+
     window.__MNBridgePending[requestId] = {
       resolve(result) {
+        clearTimeout(timer);
         resolve(result);
       },
       reject(error) {
+        clearTimeout(timer);
         reject(error);
       },
     };
@@ -63,7 +70,7 @@ function send(command, payload = null) {
       } catch (error) {
         // iframe cleanup is best-effort
       }
-    }, 600);
+    }, timeoutMs + 1000);
   });
 }
 

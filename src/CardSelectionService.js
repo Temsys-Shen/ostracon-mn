@@ -232,9 +232,140 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  function textOf(value) {
+    if (value === undefined || value === null) return "";
+    return String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  }
+
+  function summarizeNote(node) {
+    const note = node.note;
+    const comments = arrayFromNSArray(note.comments);
+    let firstTextComment = "";
+    let hasImage = false;
+    comments.forEach(function (comment) {
+      if (!comment || !comment.type) return;
+      if (!firstTextComment && comment.type === "TextNote") firstTextComment = textOf(comment.text);
+      if (comment.type === "PaintNote") hasImage = true;
+    });
+
+    return {
+      id: node.noteId,
+      title: textOf(note.noteTitle) || "未命名卡片",
+      excerpt: textOf(note.excerptText),
+      comment: firstTextComment,
+      sourceAnchor: "marginnote4app://note/" + node.noteId,
+      selected: true,
+      hasImage: hasImage,
+      hasHandwriting: hasImage,
+    };
+  }
+
+  function getCurrentNotebookInfo(context) {
+    const info = getSelectedCardsInfo(context);
+    return [{
+      id: "current-selection",
+      title: info.sourceTitle || "当前选中卡片",
+      source: "current-selection",
+      selected: true,
+      cardCount: info.noteCount,
+    }];
+  }
+
+  function listCurrentCards(context) {
+    const selection = getSelectedCards(context);
+    return selection.flatCards.map(summarizeNote);
+  }
+
+  function countAllNotes(notes) {
+    var count = 0;
+    for (var i = 0; i < notes.length; i++) {
+      count++;
+      var children = arrayFromNSArray(notes[i].childNotes);
+      count += countAllNotes(children);
+    }
+    return count;
+  }
+
+  function collectAllNotes(notes) {
+    var result = [];
+    for (var i = 0; i < notes.length; i++) {
+      var note = notes[i];
+      result.push(note);
+      var children = arrayFromNSArray(note.childNotes);
+      if (children.length > 0) {
+        result = result.concat(collectAllNotes(children));
+      }
+    }
+    return result;
+  }
+
+  function summarizeDbNote(note) {
+    var firstTextComment = "";
+    var hasImage = false;
+    try {
+      var comments = arrayFromNSArray(note.comments);
+      for (var i = 0; i < comments.length; i++) {
+        var comment = comments[i];
+        if (!comment || !comment.type) continue;
+        if (!firstTextComment && comment.type === "TextNote") firstTextComment = textOf(comment.text);
+        if (comment.type === "PaintNote") hasImage = true;
+      }
+    } catch (_) {}
+
+    return {
+      id: String(note.noteId || ""),
+      title: textOf(note.noteTitle) || "未命名卡片",
+      excerpt: textOf(note.excerptText),
+      comment: firstTextComment,
+      sourceAnchor: "marginnote4app://note/" + String(note.noteId || ""),
+      selected: false,
+      hasImage: hasImage,
+      hasHandwriting: hasImage,
+      colorIndex: typeof note.colorIndex === "number" ? Number(note.colorIndex) : undefined,
+    };
+  }
+
+  function listAllNotebooks(context) {
+    var db = Database.sharedInstance();
+    var allTopics = arrayFromNSArray(db.allNotebooks());
+
+    var currentNbId = "";
+    try {
+      var sc = getStudyController(context);
+      var nc = sc.notebookController;
+      if (nc && nc.notebookId) currentNbId = String(nc.notebookId);
+    } catch (_) {}
+
+    return allTopics.map(function (topic) {
+      var notes = arrayFromNSArray(topic.notes);
+      return {
+        id: String(topic.topicId || ""),
+        title: String(topic.title || ""),
+        source: String(topic.source || ""),
+        selected: String(topic.topicId) === currentNbId,
+        cardCount: countAllNotes(notes),
+      };
+    });
+  }
+
+  function listAllCards(context, notebookId) {
+    var db = Database.sharedInstance();
+    var notebook = db.getNotebookById(notebookId);
+    if (!notebook) throw new Error("未找到笔记本: " + notebookId);
+
+    var rootNotes = arrayFromNSArray(notebook.notes);
+    var allDbNotes = collectAllNotes(rootNotes);
+
+    return allDbNotes.map(summarizeDbNote);
+  }
+
   return {
     getSelectedCards,
     getSelectedCardsInfo,
+    getCurrentNotebookInfo,
+    listCurrentCards,
+    listAllNotebooks,
+    listAllCards,
     arrayFromNSArray,
   };
 })();

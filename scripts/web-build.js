@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { transformSync } = require("@babel/core");
+const presetEnv = require("@babel/preset-env").default;
 
 function getLocalBin(rootDir, name) {
   const ext = process.platform === "win32" ? ".cmd" : "";
@@ -17,6 +19,30 @@ function resolveSingleBundle(distAssetsDirPath) {
   }
 
   return path.join(distAssetsDirPath, jsFiles[0]);
+}
+
+function transpileLegacyBundle(filePath) {
+  const source = fs.readFileSync(filePath, "utf8");
+  const result = transformSync(source, {
+    babelrc: false,
+    configFile: false,
+    comments: false,
+    compact: true,
+    sourceType: "script",
+    presets: [[presetEnv, {
+      modules: false,
+      targets: {
+        ie: "11",
+      },
+      useBuiltIns: false,
+    }]],
+  });
+
+  if (!result || typeof result.code !== "string") {
+    throw new Error(`Legacy transpile failed: ${filePath}`);
+  }
+
+  fs.writeFileSync(filePath, result.code);
 }
 
 function main() {
@@ -45,6 +71,7 @@ function main() {
   if (builtJsPath !== distJsPath) {
     fs.renameSync(builtJsPath, distJsPath);
   }
+  transpileLegacyBundle(distJsPath);
 
   const html = `<!doctype html>
 <html lang="en">
@@ -53,6 +80,28 @@ function main() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MarginNote Web Template</title>
     <link rel="stylesheet" href="./assets/app.css" />
+    <script>
+      (function () {
+        function showBuildError(message) {
+          var root = document.getElementById("root");
+          if (!root) return;
+          root.innerHTML = "<div style=\\"padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#b00020;white-space:pre-wrap;\\">Web panel failed to load:\\n" +
+            String(message || "Unknown error").replace(/[<>&]/g, function (char) {
+              return { "<": "&lt;", ">": "&gt;", "&": "&amp;" }[char];
+            }) +
+            "</div>";
+        }
+        window.onerror = function (message, source, line, column, error) {
+          showBuildError(error && error.message ? error.message : message);
+        };
+        if (window.addEventListener) {
+          window.addEventListener("unhandledrejection", function (event) {
+            var reason = event && event.reason;
+            showBuildError(reason && reason.message ? reason.message : reason);
+          });
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

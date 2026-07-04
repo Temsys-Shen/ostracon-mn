@@ -62,67 +62,200 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     return Math.max(140, 60 + lineCount * 18);
   }
 
-  var NODE_WIDTH = 380;
-  var NODE_GAP_X = 120;
-  var NODE_GAP_Y = 80;
-  var BASE_X = 100;
-  var BASE_Y = 100;
+  var LAYOUT_CONFIG = {
+    horizontalGap: 100,
+    verticalGap: 24,
+    nodeWidth: 380,
+    baseX: 100,
+    baseY: 100,
+  };
 
-  function assignCanvasPositions(nodes, roots, includeImages) {
-    var layerHeights = {};
-    var childCounts = {};
+  function contourLayout(roots, config, nodesById) {
+    var positions = {};
+    var cursorY = config.baseY;
 
-    function countDescendants(node) {
-      var count = 0;
-      node.children.forEach(function (child) {
-        count += 1 + countDescendants(child);
-      });
-      return count;
-    }
+    for (var ri = 0; ri < roots.length; ri++) {
+      var root = roots[ri];
+      var rootId = root.noteId;
+      var rootH = nodesById[rootId].height;
 
-    roots.forEach(function (root) {
-      childCounts[root.noteId] = countDescendants(root);
-    });
+      var rootX = config.baseX;
+      var rootY = cursorY;
+      positions[rootId] = { x: rootX, y: rootY };
 
-    function heightFor(card) {
-      return estimateHeight(nodeText(card.note, includeImages));
-    }
+      var childrenPositions = {};
+      layoutGroup(root, root.children, "right", rootX, rootY, config, nodesById, childrenPositions);
 
-    function positionNode(node, x, y) {
-      var idx = nodes.findIndex(function (n) { return n.id === node.noteId; });
-      if (idx >= 0) {
-        nodes[idx].canvasX = Math.round(x);
-        nodes[idx].canvasY = Math.round(y);
+      for (var id in childrenPositions) {
+        positions[id] = childrenPositions[id];
       }
 
-      if (node.children.length === 0) return;
-
-      var children = node.children;
-      var totalChildWidth = 0;
-      children.forEach(function (child) {
-        var childHeight = heightFor(child);
-        var descendants = countDescendants(child);
-        var width = (descendants > 0 ? descendants * (NODE_WIDTH + NODE_GAP_X) : NODE_WIDTH);
-        totalChildWidth += width;
-      });
-
-      var startX = x - Math.floor(totalChildWidth / 2) + Math.floor(NODE_WIDTH / 2);
-      var currentX = startX;
-
-      children.forEach(function (child) {
-        var descendants = countDescendants(child);
-        var blockWidth = (descendants > 0 ? descendants * (NODE_WIDTH + NODE_GAP_X) : NODE_WIDTH);
-        var childX = currentX + Math.floor(blockWidth / 2) - Math.floor(NODE_WIDTH / 2);
-        positionNode(child, childX, y + NODE_GAP_Y + heightFor(child));
-        currentX += blockWidth;
-      });
+      var maxY = rootY + rootH;
+      for (var id in childrenPositions) {
+        var node = nodesById[id];
+        if (positions[id].y + node.height > maxY) maxY = positions[id].y + node.height;
+      }
+      cursorY = maxY + config.verticalGap * 3;
     }
 
-    var rootY = BASE_Y;
-    roots.forEach(function (root) {
-      positionNode(root, BASE_X + Math.floor(NODE_WIDTH / 2), rootY);
-      rootY += NODE_GAP_Y + heightFor(root);
-    });
+    return positions;
+  }
+
+  function layoutGroup(parentNode, children, direction, parentX, parentY, config, nodesById, allPositions) {
+    if (children.length === 0) return;
+
+    var parentH = nodesById[parentNode.noteId].height;
+    var parentW = nodesById[parentNode.noteId].width;
+    var parentCenterY = parentY + parentH / 2;
+
+    var subtrees = [];
+    for (var ci = 0; ci < children.length; ci++) {
+      var child = children[ci];
+      var childInfo = nodesById[child.noteId];
+      var childW = childInfo.width;
+      var childX = direction === "right"
+        ? parentX + parentW + config.horizontalGap
+        : parentX - childW - config.horizontalGap;
+
+      var tempPositions = {};
+      var contour = layoutSubtree(child, childX, 0, 0, direction, config, nodesById, tempPositions);
+      subtrees.push({ positions: tempPositions, contour: contour });
+    }
+
+    var packResult = packSubtrees(subtrees, config.verticalGap);
+    var yOffsets = packResult.yOffsets;
+
+    var lastIdx = children.length - 1;
+    var lastChildH = nodesById[children[lastIdx].noteId].height;
+    var blockTop = yOffsets[0];
+    var blockBottom = yOffsets[lastIdx] + lastChildH;
+    var globalShift = parentCenterY - (blockTop + blockBottom) / 2;
+
+    for (var si = 0; si < subtrees.length; si++) {
+      var yShift = yOffsets[si] + globalShift;
+      for (var id in subtrees[si].positions) {
+        allPositions[id] = { x: subtrees[si].positions[id].x, y: subtrees[si].positions[id].y + yShift };
+      }
+    }
+  }
+
+  function layoutSubtree(node, nodeX, nodeY, depth, direction, config, nodesById, positions) {
+    var nodeInfo = nodesById[node.noteId];
+    var nodeH = nodeInfo.height;
+    var nodeW = nodeInfo.width;
+
+    positions[node.noteId] = { x: nodeX, y: nodeY };
+
+    var contour = [];
+    contour[depth] = { top: nodeY, bottom: nodeY + nodeH };
+
+    if (node.children.length === 0) return contour;
+
+    var childSubtrees = [];
+    for (var ci = 0; ci < node.children.length; ci++) {
+      var child = node.children[ci];
+      var childInfo = nodesById[child.noteId];
+      var childW = childInfo.width;
+      var childX = direction === "right"
+        ? nodeX + nodeW + config.horizontalGap
+        : nodeX - childW - config.horizontalGap;
+
+      var tempPositions = {};
+      var childContour = layoutSubtree(child, childX, 0, depth + 1, direction, config, nodesById, tempPositions);
+      childSubtrees.push({ positions: tempPositions, contour: childContour });
+    }
+
+    var packResult = packSubtrees(childSubtrees, config.verticalGap);
+    var yOffsets = packResult.yOffsets;
+    var combinedContour = packResult.combinedContour;
+
+    var lastIdx = node.children.length - 1;
+    var lastChildH = nodesById[node.children[lastIdx].noteId].height;
+    var blockTop = yOffsets[0];
+    var blockBottom = yOffsets[lastIdx] + lastChildH;
+    var centerShift = (nodeY + nodeH / 2) - (blockTop + blockBottom) / 2;
+
+    for (var si = 0; si < childSubtrees.length; si++) {
+      var yShift = yOffsets[si] + centerShift;
+      for (var id in childSubtrees[si].positions) {
+        positions[id] = { x: childSubtrees[si].positions[id].x, y: childSubtrees[si].positions[id].y + yShift };
+      }
+    }
+
+    for (var d = 0; d < combinedContour.length; d++) {
+      if (combinedContour[d] !== undefined) {
+        var shifted = { top: combinedContour[d].top + centerShift, bottom: combinedContour[d].bottom + centerShift };
+        var existing = contour[d];
+        if (existing !== undefined) {
+          if (shifted.top < existing.top) existing.top = shifted.top;
+          if (shifted.bottom > existing.bottom) existing.bottom = shifted.bottom;
+        } else {
+          contour[d] = { top: shifted.top, bottom: shifted.bottom };
+        }
+      }
+    }
+
+    return contour;
+  }
+
+  function packSubtrees(subtrees, verticalGap) {
+    if (subtrees.length === 0) {
+      return { yOffsets: [], combinedContour: [] };
+    }
+
+    var yOffsets = [0];
+    var combinedContour = [];
+
+    for (var d = 0; d < subtrees[0].contour.length; d++) {
+      var ext = subtrees[0].contour[d];
+      if (ext !== undefined) {
+        combinedContour[d] = { top: ext.top, bottom: ext.bottom };
+      }
+    }
+
+    for (var si = 1; si < subtrees.length; si++) {
+      var contour = subtrees[si].contour;
+      var shift = 0;
+
+      for (var d = 0; d < contour.length; d++) {
+        var ext = contour[d];
+        if (ext !== undefined) {
+          var prev = combinedContour[d];
+          if (prev !== undefined) {
+            var needed = prev.bottom + verticalGap - ext.top;
+            if (needed > shift) shift = needed;
+          }
+        }
+      }
+
+      yOffsets.push(shift);
+
+      for (var d = 0; d < contour.length; d++) {
+        var ext = contour[d];
+        if (ext !== undefined) {
+          var shifted = { top: ext.top + shift, bottom: ext.bottom + shift };
+          var existing = combinedContour[d];
+          if (existing !== undefined) {
+            if (shifted.top < existing.top) existing.top = shifted.top;
+            if (shifted.bottom > existing.bottom) existing.bottom = shifted.bottom;
+          } else {
+            combinedContour[d] = { top: shifted.top, bottom: shifted.bottom };
+          }
+        }
+      }
+    }
+
+    return { yOffsets: yOffsets, combinedContour: combinedContour };
+  }
+
+  function computeEdgeSide(fromNode, toNode) {
+    var fromCx = fromNode.x + fromNode.width / 2;
+    var toCx = toNode.x + toNode.width / 2;
+    if (toCx >= fromCx) {
+      return { fromSide: "right", toSide: "left" };
+    } else {
+      return { fromSide: "left", toSide: "right" };
+    }
   }
 
   function buildCanvas(selectionResult, rawOptions) {
@@ -137,31 +270,42 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
         type: "text",
         x: 0,
         y: 0,
-        width: NODE_WIDTH,
+        width: LAYOUT_CONFIG.nodeWidth,
         height: estimateHeight(nodeText(card.note, includeImages)),
         text: nodeText(card.note, includeImages),
       };
     });
 
-    assignCanvasPositions(nodes, treeRoots, includeImages);
+    var nodesById = {};
+    nodes.forEach(function (node) {
+      nodesById[node.id] = node;
+    });
+
+    var positions = contourLayout(treeRoots, LAYOUT_CONFIG, nodesById);
 
     nodes.forEach(function (node) {
-      node.x = node.canvasX || BASE_X;
-      node.y = node.canvasY || BASE_Y;
-      delete node.canvasX;
-      delete node.canvasY;
+      if (positions[node.id]) {
+        node.x = Math.round(positions[node.id].x);
+        node.y = Math.round(positions[node.id].y);
+      } else {
+        node.x = LAYOUT_CONFIG.baseX;
+        node.y = LAYOUT_CONFIG.baseY;
+      }
     });
 
     var edges = [];
     function walkTree(node) {
       node.children.forEach(function (child) {
         if (!node.noteId || !child.noteId) return;
+        var fromNode = nodesById[node.noteId];
+        var toNode = nodesById[child.noteId];
+        var side = computeEdgeSide(fromNode, toNode);
         edges.push({
           id: createId(),
           fromNode: node.noteId,
-          fromSide: "bottom",
+          fromSide: side.fromSide,
           toNode: child.noteId,
-          toSide: "top",
+          toSide: side.toSide,
         });
         walkTree(child);
       });

@@ -11,6 +11,8 @@
     "version:major": "node scripts/bump-version.js major"
   },
   "devDependencies": {
+    "@babel/core": "^8.0.1",
+    "@babel/preset-env": "^8.0.2",
     "@vitejs/plugin-react": "^6.0.1",
     "clean-css": "^5.3.3",
     "html-minifier-terser": "^7.2.0",

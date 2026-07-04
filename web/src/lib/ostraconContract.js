@@ -17,21 +17,21 @@ function createPacketDraft({
   folder = "Inbox",
   format = "markdown",
   isCanvas = false,
+  objects = null,
 } = {}) {
   const now = new Date().toISOString();
-  const body = isCanvas ? "" : markdown;
-  return {
-    version: 1,
-    id: createId("ostracon"),
-    status: "sent",
-    transport: "ws",
-    format: isCanvas ? "canvas" : "markdown",
-    createdAt: now,
-    updatedAt: now,
-    source: { platform: "MarginNote", title: sourceTitle, url: "" },
-    summary: "",
-    tags: normalizeTags(tags),
-    objects: [
+  const packetObjects = Array.isArray(objects) && objects.length > 0
+    ? objects.map(item => ({
+      id: item.id || createId("card"),
+      kind: item.kind || "Card",
+      title: item.title || "",
+      excerpt: item.excerpt || "",
+      comment: item.comment || "",
+      sourceAnchor: item.sourceAnchor || "",
+      hasImage: Boolean(item.hasImage),
+      hasHandwriting: Boolean(item.hasHandwriting),
+    }))
+    : [
       {
         id: createId("card"),
         kind: "Card",
@@ -42,7 +42,19 @@ function createPacketDraft({
         hasImage: false,
         hasHandwriting: false,
       },
-    ],
+    ];
+  return {
+    version: 1,
+    id: createId("ostracon"),
+    status: "sent",
+    transport: "ws",
+    format: isCanvas ? "canvas" : "markdown",
+    createdAt: now,
+    updatedAt: now,
+    source: { platform: "MarginNote", title: sourceTitle, url: "" },
+    summary: packetObjects.length > 1 ? `${packetObjects.length}张MN卡片` : "",
+    tags: normalizeTags(tags),
+    objects: packetObjects,
     relations: [],
     notes: markdown,
     destination: { platform: "Obsidian", vault: "", folder },

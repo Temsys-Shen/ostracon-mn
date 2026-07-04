@@ -1,4 +1,5 @@
-import { normalizePacket } from "./ostraconContract";
+import MNBridge from "./mnBridge";
+import { createPacketDraft, normalizePacket } from "./ostraconContract";
 
 const STORAGE_KEY = "ostracon-mn-ws-settings";
 const DEFAULT_PORT = 27123;
@@ -19,8 +20,8 @@ function nowIso() {
 }
 
 function toInteger(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  const parsed = parseInt(value, 10);
+  return isFinite(parsed) ? parsed : fallback;
 }
 
 function trimString(value) {
@@ -44,28 +45,22 @@ function createDefaultSettings() {
 }
 
 function loadSettings() {
-  if (typeof window === "undefined") {
-    return createDefaultSettings();
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return createDefaultSettings();
-  }
-
-  try {
-    return normalizeSettings(JSON.parse(raw));
-  } catch (error) {
-    console.error("Failed to parse Ostracon WS settings", error);
-    return createDefaultSettings();
-  }
+  return createDefaultSettings();
 }
 
-function saveSettings(settings) {
+function readLegacySettings() {
   if (typeof window === "undefined") {
-    return;
+    return null;
   }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeSettings(settings)));
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  return normalizeSettings(JSON.parse(raw));
+}
+
+function clearLegacySettings() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
 }
 
 function buildConnectionUrl(settings, sessionId) {
@@ -103,17 +98,6 @@ function buildClientHelloPayload(settings, sessionId, clientId) {
   };
 }
 
-function maskToken(token) {
-  const value = trimString(token);
-  if (!value) {
-    return "";
-  }
-  if (value.length <= 8) {
-    return `${value.slice(0, 2)}***`;
-  }
-  return `${value.slice(0, 4)}…${value.slice(-4)}`;
-}
-
 function createRequestId(prefix) {
   return createId(prefix);
 }
@@ -122,6 +106,7 @@ class OstraconWsClient {
   constructor() {
     this.listeners = new Set();
     this.settings = loadSettings();
+    this.settingsReady = false;
     this.clientId = createId("mn-client");
     this.sessionId = createId("mn-session");
     this.socket = null;
@@ -129,6 +114,7 @@ class OstraconWsClient {
     this.manualDisconnect = false;
     this.reconnectTimer = null;
     this.connectTimer = null;
+    this.connectPromise = null;
     this.heartbeatTimer = null;
     this.heartbeatInFlight = false;
     this.reconnectCount = 0;
@@ -152,6 +138,7 @@ class OstraconWsClient {
       lastError: "",
       lastClose: null,
       serverSessionId: "",
+      vaultName: "",
     };
   }
 
@@ -213,7 +200,7 @@ class OstraconWsClient {
     });
 
     this.settings = nextSettings;
-    saveSettings(nextSettings);
+    this.settingsReady = true;
     this.setState({
       settings: nextSettings,
     });
@@ -222,6 +209,29 @@ class OstraconWsClient {
       port: nextSettings.port,
       autoReconnect: nextSettings.autoReconnect,
     });
+    return MNBridge.send("setWsSettings", nextSettings);
+  }
+
+  async loadStoredSettings() {
+    let nativeSettings;
+    try {
+      nativeSettings = await MNBridge.send("getWsSettings");
+    } catch (e) {
+      nativeSettings = null;
+    }
+    let nextSettings = normalizeSettings(nativeSettings || {});
+    const legacySettings = readLegacySettings();
+    if (legacySettings && legacySettings.token && !nextSettings.token) {
+      nextSettings = legacySettings;
+      await MNBridge.send("setWsSettings", nextSettings);
+      clearLegacySettings();
+    }
+    this.settings = nextSettings;
+    this.settingsReady = true;
+    this.setState({
+      settings: nextSettings,
+    });
+    return this.getSnapshot();
   }
 
   buildConnectionUrl() {
@@ -232,7 +242,7 @@ class OstraconWsClient {
     if (!this.settings.token) {
       throw new Error("Obsidian token is required before connecting");
     }
-    if (!Number.isFinite(this.settings.port) || this.settings.port <= 0) {
+    if (!isFinite(this.settings.port) || this.settings.port <= 0) {
       throw new Error(`Invalid WebSocket port: ${this.settings.port}`);
     }
   }
@@ -240,8 +250,20 @@ class OstraconWsClient {
   connect() {
     this.validateSettings();
 
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.setState({
+        status: "connected",
+        socketState: "open",
+        connected: true,
+        lastError: "",
+      });
       return Promise.resolve(this.getSnapshot());
+    }
+    if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
+      if (this.connectPromise) {
+        return this.connectPromise;
+      }
+      throw new Error("WebSocket connection is already in progress");
     }
 
     this.manualDisconnect = false;
@@ -260,7 +282,7 @@ class OstraconWsClient {
       lastClose: null,
     });
 
-    return new Promise((resolve, reject) => {
+    this.connectPromise = new Promise((resolve, reject) => {
       let settled = false;
       const settleResolve = (value) => {
         if (settled) {
@@ -268,6 +290,7 @@ class OstraconWsClient {
         }
         settled = true;
         if (this.connectTimer) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+        this.connectPromise = null;
         resolve(value);
       };
       const settleReject = (error) => {
@@ -276,11 +299,23 @@ class OstraconWsClient {
         }
         settled = true;
         if (this.connectTimer) { clearTimeout(this.connectTimer); this.connectTimer = null; }
+        this.connectPromise = null;
         reject(error);
       };
 
       this.connectTimer = setTimeout(() => {
-        settleReject(new Error("连接超时，请确认 Obsidian Ostracon 插件已启动"));
+        const error = new Error("连接超时，请确认Obsidian Ostracon插件已启动");
+        if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
+          this.socket.close(1000, "connect timeout");
+        }
+        this.setState({
+          status: "error",
+          socketState: "closed",
+          connected: false,
+          ready: false,
+          lastError: error.message,
+        });
+        settleReject(error);
       }, 8000);
 
       try {
@@ -335,6 +370,7 @@ class OstraconWsClient {
         }
       });
     });
+    return this.connectPromise;
   }
 
   disconnect() {
@@ -385,14 +421,15 @@ class OstraconWsClient {
         return;
       }
       this.heartbeatInFlight = true;
+      const clearHeartbeat = () => {
+        this.heartbeatInFlight = false;
+      };
       this.ping({ source: "heartbeat" })
-        .catch((error) => {
+        .then(clearHeartbeat, (error) => {
           this.log("error", "心跳失败", {
             message: error.message || String(error),
           });
-        })
-        .finally(() => {
-          this.heartbeatInFlight = false;
+          clearHeartbeat();
         });
     }, this.settings.heartbeatIntervalMs);
   }
@@ -429,6 +466,7 @@ class OstraconWsClient {
     if (!this.shouldReconnect) {
       this.setState({
         status: "closed",
+        lastError: event.reason || `WebSocket closed with code ${event.code}`,
       });
       return;
     }
@@ -476,6 +514,29 @@ class OstraconWsClient {
       throw new Error("WebSocket is not open");
     }
     this.socket.send(JSON.stringify(frame));
+  }
+
+  sendResult(requestId, payload) {
+    this.sendRaw({
+      type: "sync_result",
+      requestId: requestId || "",
+      clientId: this.clientId,
+      sessionId: this.sessionId,
+      payload,
+    });
+  }
+
+  sendCommandError(requestId, command, error) {
+    this.sendRaw({
+      type: "error",
+      requestId: requestId || "",
+      clientId: this.clientId,
+      sessionId: this.sessionId,
+      payload: {
+        command,
+        message: error && error.message ? error.message : String(error),
+      },
+    });
   }
 
   rememberMessage(message) {
@@ -541,6 +602,7 @@ class OstraconWsClient {
           ready: true,
           status: "ready",
           serverSessionId: message.payload && message.payload.sessionId ? message.payload.sessionId : "",
+          vaultName: message.payload && message.payload.vaultName ? message.payload.vaultName : "",
           lastHello: {
             at: nowIso(),
             payload: message.payload || null,
@@ -594,12 +656,71 @@ class OstraconWsClient {
         });
         this.log("error", "收到OB错误", message.payload || null);
         break;
+      case "command":
+        this.handleServerCommand(message);
+        break;
       default:
         this.log("info", "收到未处理消息", {
           type: message.type,
           requestId: message.requestId || "",
         });
         break;
+    }
+  }
+
+  async handleServerCommand(message) {
+    const command = String(message.command || "").trim();
+    if (!command) {
+      this.sendCommandError(message.requestId, command, new Error("OB命令缺少command"));
+      return;
+    }
+
+    try {
+      if (command === "listNotebooks") {
+        const result = await MNBridge.send("listNotebooks", message.payload || {});
+        this.sendResult(message.requestId, result);
+        return;
+      }
+
+      if (command === "listCards") {
+        const result = await MNBridge.send("listCards", message.payload || {});
+        this.sendResult(message.requestId, result);
+        return;
+      }
+
+      if (command === "fetchCards") {
+        const result = await MNBridge.send("fetchCards", message.payload || {});
+        const format = result && result.format === "canvas" ? "canvas" : "markdown";
+        const content = format === "canvas" ? result.canvas : result.markdown;
+        const packet = normalizePacket(createPacketDraft({
+          markdown: content,
+          sourceTitle: result.fileBaseName || "MarginNote",
+          folder: "Inbox",
+          format,
+          isCanvas: format === "canvas",
+          objects: Array.isArray(result.cards) ? result.cards : null,
+        }));
+        this.sendResult(message.requestId, {
+          ok: true,
+          packet,
+          noteCount: result.noteCount || packet.objects.length,
+        });
+        return;
+      }
+
+      if (command === "syncCard") {
+        const result = await MNBridge.send("syncCard", message.payload || {});
+        this.sendResult(message.requestId, result);
+        return;
+      }
+
+      throw new Error(`不支持的OB命令: ${command}`);
+    } catch (error) {
+      this.sendCommandError(message.requestId, command, error);
+      this.log("error", "处理OB命令失败", {
+        command,
+        message: error && error.message ? error.message : String(error),
+      });
     }
   }
 
@@ -698,7 +819,7 @@ class OstraconWsClient {
     );
   }
 
-  sendPacket(packet) {
+  sendPacket(packet, autoSync = false) {
     const normalized = normalizePacket(packet);
     return this.request(
       {
@@ -706,10 +827,25 @@ class OstraconWsClient {
         command: "submitPacket",
         clientId: this.clientId,
         sessionId: this.sessionId,
-        payload: normalized,
+        payload: autoSync ? { packet: normalized, autoSynced: true } : normalized,
       },
       {
         resolveOn: ["sync_result"],
+      },
+    );
+  }
+
+  sendCardUpdated(payload) {
+    return this.request(
+      {
+        type: "command",
+        command: "cardUpdated",
+        clientId: this.clientId,
+        sessionId: this.sessionId,
+        payload,
+      },
+      {
+        resolveOn: ["ack"],
       },
     );
   }
@@ -721,7 +857,6 @@ export {
   createDefaultSettings,
   createRequestId,
   loadSettings,
-  maskToken,
   normalizeSettings,
 };
 

@@ -18,6 +18,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       mode: src.mode === "tree" ? "tree" : "flat",
       excerptStyle: src.excerptStyle === "plain" ? "plain" : "quote",
       includeImages: src.includeImages !== false,
+      includeNoteIds: Boolean(src.includeNoteIds),
     };
   }
 
@@ -114,7 +115,9 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     const contentBase = options.mode === "tree" ? headingLevel : 2;
     var lines = [];
     lines._warnings = warnings;
-    lines.push(`${headingPrefix(headingLevel, warnings)} ${titleText}`);
+    var heading = `${headingPrefix(headingLevel, warnings)} ${titleText}`;
+    if (options.includeNoteIds) heading += ` <!-- ostracon_noteid:${note.noteId} -->`;
+    lines.push(heading);
     lines.push("");
 
     appendExcerpt(lines, note, options, contentBase, warnings);

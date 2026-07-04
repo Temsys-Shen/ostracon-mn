@@ -4,185 +4,47 @@ import { createPacketDraft, normalizePacket } from "./lib/ostraconContract";
 import ostraconWsClient from "./lib/ostraconWsClient";
 import useBridgeStore from "./store/useBridgeStore";
 
-/* ── Helpers ── */
-
-function maskToken(token) {
-  if (!token) return "";
-  if (token.length <= 8) return `${token.slice(0, 2)}***`;
-  return `${token.slice(0, 4)}…${token.slice(-4)}`;
-}
-
 function formatTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  const now = new Date();
-  const diff = Math.round((now - d) / 60000);
+  const diff = Math.round((Date.now() - d) / 60000);
   if (diff < 1) return "刚刚";
   if (diff < 60) return `${diff}分钟前`;
   return `${Math.round(diff / 60)}小时前`;
 }
 
-function normalizeBridgeError(error) {
-  if (!error) return "未知错误";
-  if (typeof error === "string") return error;
-  return error.message || JSON.stringify(error);
+function normalizeError(e) {
+  if (!e) return "未知错误";
+  return typeof e === "string" ? e : e.message || JSON.stringify(e);
 }
-
-/* ── Settings panel ── */
 
 function parseConnectionUrl(input) {
   if (!input) return null;
   try {
     const url = new URL(input.trim());
-    if (url.protocol === 'ws:' || url.protocol === 'wss:') {
-      return {
-        host: url.hostname,
-        port: url.port || '27123',
-        token: url.searchParams.get('token') || '',
-      };
+    if (url.protocol === "ws:" || url.protocol === "wss:") {
+      return { host: url.hostname, port: url.port || "27123", token: url.searchParams.get("token") || "" };
     }
   } catch (_) {}
   return null;
 }
 
-function SettingsPanel({ onClose }) {
-  const connection = useBridgeStore((s) => s.connection);
-  const [form, setForm] = useState({
-    host: connection.settings.host,
-    port: String(connection.settings.port),
-    token: connection.settings.token,
-  });
-  const [urlInput, setUrlInput] = useState('');
+/* ── History ── */
 
-  const apply = async () => {
-    ostraconWsClient.updateSettings({
-      host: form.host,
-      port: Number.parseInt(form.port, 10) || 27123,
-      token: form.token,
-    });
-    await ostraconWsClient.connect().catch(() => {});
-    onClose();
-  };
-
-  const handleUrlPaste = (value) => {
-    setUrlInput(value);
-    const parsed = parseConnectionUrl(value);
-    if (parsed) {
-      setForm({ host: parsed.host, port: parsed.port, token: parsed.token });
-    }
-  };
-
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-header">
-          <h2>设置</h2>
-          <button className="icon-button" onClick={onClose} type="button">×</button>
-        </div>
-        <div className="field-group">
-          <label className="field">
-            <span>从 OB 复制连接串粘贴到此</span>
-            <input value={urlInput} onChange={(e) => handleUrlPaste(e.target.value)} placeholder="ws://127.0.0.1:27123?token=..." />
-          </label>
-          <hr className="field-sep" />
-          <label className="field">
-            <span>Token</span>
-            <input value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>主机</span>
-            <input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>端口</span>
-            <input value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} />
-          </label>
-        </div>
-        <button className="primary-button full" onClick={apply} type="button">保存并连接</button>
-        <p className="hint">从 OB Ostracon 设置页复制连接串（整段 URL），粘贴后自动解析。</p>
-      </div>
-    </div>
-  );
-}
-
-/* ── Connection bar ── */
-
-function ConnectionBar({ connection, onTest, onConnect, onDisconnect }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="connection-bar">
-      <div className="connection-main" onClick={() => setExpanded(!expanded)} role="button" tabIndex={0}>
-        <span className={`status-dot ${connection.connected ? "on" : "off"}`} />
-        <span className="connection-label">
-          {connection.connected ? "已连接" : "未连接"}
-        </span>
-        {connection.connected && (
-          <span className="connection-target">· {connection.settings.host}:{connection.settings.port}</span>
-        )}
-        <span className={`expand-arrow ${expanded ? "open" : ""}`}>▸</span>
-      </div>
-      {expanded && (
-        <div className="connection-detail">
-          <div className="detail-row">
-            <span className="detail-label">状态</span>
-            <span>{connection.status}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Socket</span>
-            <span>{connection.socketState}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">Token</span>
-            <span className="mono">{maskToken(connection.settings.token) || "未设置"}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">会话</span>
-            <span className="mono">{connection.sessionId || "-"}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">OB 会话</span>
-            <span className="mono">{connection.serverSessionId || "-"}</span>
-          </div>
-          <div className="detail-row">
-            <span className="detail-label">重连</span>
-            <span>{connection.reconnectCount > 0 ? `${connection.reconnectCount} 次` : "0"}</span>
-          </div>
-          {connection.lastError && (
-            <div className="detail-row error">
-              <span className="detail-label">错误</span>
-              <span>{connection.lastError}</span>
-            </div>
-          )}
-          <div className="detail-actions">
-            <button className="secondary-button small" disabled={!connection.settings.token} onClick={onTest} type="button">测试连接</button>
-            {connection.connected ? (
-              <button className="secondary-button small" onClick={onDisconnect} type="button">断开</button>
-            ) : (
-              <button className="secondary-button small" disabled={!connection.settings.token} onClick={onConnect} type="button">连接</button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── History section ── */
-
-function HistorySection({ history }) {
+function HistorySection({ history, vaultName }) {
   if (!history || history.length === 0) return null;
 
   return (
     <div className="history-section">
-      <h3 className="section-label">最近</h3>
-      {history.slice(0, 10).map((entry, i) => (
+      <div className="history-label">最近</div>
+      {history.slice(0, 8).map((entry, i) => (
         <div className={`history-item ${entry.ok ? "ok" : "fail"}`} key={`${entry.at}-${i}`}>
+          {entry.synced && <span className="history-sync-icon">🔄</span>}
           <span className="history-icon">{entry.ok ? "✓" : "✗"}</span>
-          <span className="history-body">
-            <span className="history-text">{entry.summary}</span>
-            <span className="history-meta">{entry.noteCount ? `${entry.noteCount} 张 · ` : ""}{entry.format || "Markdown"}</span>
-          </span>
+          <span className="history-body">{entry.summary}</span>
+          {entry.ok && entry.filePath && vaultName && (
+            <a className="history-ob-link" href={`obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(entry.filePath)}`} target="_blank" rel="noreferrer">OB</a>
+          )}
           <span className="history-time">{formatTime(entry.at)}</span>
         </div>
       ))}
@@ -195,187 +57,283 @@ function HistorySection({ history }) {
 export default function App() {
   const [prefs, setPrefsState] = useState({ mode: "flat", excerptStyle: "quote" });
   const [format, setFormat] = useState("markdown");
-  const [canvasInfo, setCanvasInfo] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [selectedCount, setSelectedCount] = useState(0);
+
+  const [urlInput, setUrlInput] = useState("");
+  const [sendMode, setSendMode] = useState("once");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const connection = useBridgeStore((s) => s.connection);
   const sendHistory = useBridgeStore((s) => s.sendHistory);
+  const syncedCards = useBridgeStore((s) => s.syncedCards);
   const appendLog = useBridgeStore((s) => s.appendLog);
   const addSendHistory = useBridgeStore((s) => s.addSendHistory);
   const setConnection = useBridgeStore((s) => s.setConnection);
+  const setSyncedCards = useBridgeStore((s) => s.setSyncedCards);
 
-  /* Subscribe to WS client state */
+  /* WS connection state */
   useEffect(() => {
     setConnection(ostraconWsClient.getSnapshot());
+    ostraconWsClient.loadStoredSettings()
+      .then((snap) => {
+        setConnection(snap);
+        const s = snap.settings;
+        if (s.token) {
+          setUrlInput(`ws://${s.host}:${s.port}?token=${encodeURIComponent(s.token)}`);
+        }
+      })
+      .catch((e) => setNotice(`设置读取失败: ${normalizeError(e)}`));
     return ostraconWsClient.subscribe(({ event, snapshot }) => {
       setConnection(snapshot);
       if (event?.type === "log") appendLog(event.entry);
     });
   }, [appendLog, setConnection]);
 
-  /* Load saved markdown preferences */
+  /* Load native prefs + synced cards */
   useEffect(() => {
     let alive = true;
-    MNBridge.send("getMarkdownPreferences")
-      .then((r) => { if (alive && r) setPrefsState({ mode: r.mode || "flat", excerptStyle: r.excerptStyle || "quote" }); })
-      .catch(() => {});
+    Promise.all([
+      MNBridge.send("getMarkdownPreferences"),
+      MNBridge.send("getSyncedCards"),
+    ]).then(([mdPrefs, synced]) => {
+      if (!alive) return;
+      if (mdPrefs) setPrefsState({ mode: mdPrefs.mode || "flat", excerptStyle: mdPrefs.excerptStyle || "quote" });
+      setSyncedCards(synced?.cards || {});
+    }).catch((e) => setNotice(`偏好读取失败: ${normalizeError(e)}`));
     return () => { alive = false; };
+  }, [setSyncedCards]);
+
+  const setPrefs = useCallback((k, v) => {
+    setPrefsState((prev) => { const n = { ...prev, [k]: v }; MNBridge.send("setMarkdownPreferences", n).catch(() => {}); return n; });
   }, []);
 
-  const setPrefs = useCallback((key, value) => {
-    setPrefsState((prev) => {
-      const next = { ...prev, [key]: value };
-      MNBridge.send("setMarkdownPreferences", next).catch(() => {});
-      return next;
-    });
-  }, []);
+  /* Selection count polling */
+  useEffect(() => {
+    if (!connection.connected) { setSelectedCount(0); return; }
+    const poll = async () => {
+      try {
+        const info = await MNBridge.send("getSelectedCardsInfo");
+        setSelectedCount(info?.noteCount || 0);
+      } catch (_) {}
+    };
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => clearInterval(t);
+  }, [connection.connected]);
 
-  /* Connection actions */
   const doConnect = useCallback(async () => {
-    try {
-      setStatus("正在连接…");
-      await ostraconWsClient.connect();
-      setStatus("");
-    } catch (error) {
-      setStatus(`连接失败: ${normalizeBridgeError(error)}`);
-    }
-  }, []);
-
-  const doDisconnect = useCallback(() => {
-    ostraconWsClient.disconnect();
-    setStatus("已断开");
-  }, []);
-
-  const testConnection = useCallback(async () => {
-    try {
-      setStatus("正在测试连接…");
-      await ostraconWsClient.connect();
-      // wait for hello handshake
-      await new Promise((r) => setTimeout(r, 1500));
-      const snap = ostraconWsClient.getSnapshot();
-      if (snap.ready) {
-        setStatus("连接正常，握手完成");
-      } else if (snap.connected) {
-        setStatus("已连接，等待 OB 握手…");
-      } else {
-        setStatus("连接已断开");
-      }
-    } catch (error) {
-      setStatus(`连接失败: ${normalizeBridgeError(error)}`);
-    }
-  }, []);
-
-  /* Send: read cards → convert → send → result */
-  const send = useCallback(async () => {
-    if (!connection.connected) {
-      setStatus("未连接到 Obsidian，请在设置中配置");
-      setSettingsOpen(true);
+    const parsed = parseConnectionUrl(urlInput);
+    if (!parsed) {
+      setNotice("请输入有效的连接串");
       return;
     }
 
-    setLoading(true);
-    setStatus("正在读取卡片…");
+    setNotice("");
     try {
-      var payload;
-      var noteCount = 0;
-      var formatLabel = "Markdown";
+      await ostraconWsClient.updateSettings(parsed);
+      await ostraconWsClient.connect();
+      setNotice("");
+    } catch (e) {
+      const snap = ostraconWsClient.getSnapshot();
+      if (!snap.lastError) {
+        setNotice(`连接失败: ${normalizeError(e)}`);
+      }
+    }
+  }, [urlInput]);
 
+  /* Send */
+  const send = useCallback(async (autoSync) => {
+    if (!connection.connected) { setNotice("未连接"); return; }
+    setLoading(true);
+    setNotice("正在读取...");
+    try {
+      var payload, noteCount = 0, formatLabel = "Markdown";
       if (format === "canvas") {
-        var result = await MNBridge.send("previewSelectedCanvas");
-        if (!result || !result.canvas) {
-          setStatus("未选中卡片");
-          setLoading(false);
-          return;
-        }
-        payload = { canvas: result.canvas, noteCount: result.nodeCount, fileBaseName: "ostracon-canvas" };
-        noteCount = result.nodeCount;
+        const r = await MNBridge.send("previewSelectedCanvas");
+        if (!r?.canvas) { setNotice("未选中卡片"); setLoading(false); return; }
+        payload = { canvas: r.canvas, noteCount: r.nodeCount, fileBaseName: "ostracon-canvas" };
+        noteCount = r.nodeCount;
         formatLabel = "Canvas";
       } else {
-        var result = await MNBridge.send("previewSelectedMarkdown", prefs);
-        if (!result.markdown) {
-          setStatus("未选中卡片");
-          setLoading(false);
-          return;
-        }
-        payload = { markdown: result.markdown, noteCount: result.noteCount, fileBaseName: result.fileBaseName || "MarginNote" };
-        noteCount = result.noteCount;
+        const prefsWithSync = { ...prefs, includeNoteIds: autoSync };
+        const r = await MNBridge.send("previewSelectedMarkdown", prefsWithSync);
+        if (!r?.markdown) { setNotice("未选中卡片"); setLoading(false); return; }
+        payload = { markdown: r.markdown, noteCount: r.noteCount, fileBaseName: r.fileBaseName || "MarginNote" };
+        noteCount = r.noteCount;
       }
 
-      setStatus("正在发送到 Obsidian…");
-      const packet = normalizePacket(createPacketDraft({
-        markdown: payload.markdown || payload.canvas,
-        sourceTitle: payload.fileBaseName || "Ostracon",
-        folder: "Inbox",
-        format: format,
-        isCanvas: format === "canvas",
-      }));
-      await ostraconWsClient.sendPacket(packet);
+      const cardsResult = await MNBridge.send("listCards", { notebookId: "current-selection" });
+      const packetObjects = Array.isArray(cardsResult?.cards) ? cardsResult.cards : [];
+      const noteIds = packetObjects.map(c => c.id).filter(Boolean);
 
-      addSendHistory({ noteCount, summary: (payload.fileBaseName || "") + ` (${noteCount} 张)`, ok: true, at: new Date().toISOString(), format: formatLabel });
-      setStatus(`✓ 已发送 ${noteCount} 张卡片到 Obsidian (${formatLabel})`);
-    } catch (error) {
+      setNotice("正在发送...");
+      const packet = normalizePacket(createPacketDraft({
+        markdown: payload.markdown || payload.canvas, sourceTitle: payload.fileBaseName || "Ostracon",
+        folder: "Inbox", format, isCanvas: format === "canvas",
+        objects: packetObjects,
+      }));
+      const sendResult = await ostraconWsClient.sendPacket(packet, autoSync);
+      const filePath = sendResult?.payload?.record?.filePath || "";
+
+      addSendHistory({
+        noteCount, summary: `${payload.fileBaseName || ""} (${noteCount}张)`, ok: true, at: new Date().toISOString(),
+        format: formatLabel, filePath, synced: autoSync,
+      });
+      setNotice(autoSync ? `✓ 已同步 ${noteCount}张` : `✓ 已发送 ${noteCount}张`);
+
+      if (autoSync && noteIds.length > 0 && filePath) {
+        const updated = { ...syncedCards };
+        for (const id of noteIds) {
+          if (!updated[id] || updated[id].filePath !== filePath) {
+            updated[id] = { filePath, version: 1, syncedAt: new Date().toISOString() };
+          }
+        }
+        setSyncedCards(updated);
+        MNBridge.send("setSyncedCards", { cards: updated }).catch(() => {});
+      }
+    } catch (e) {
       addSendHistory({ noteCount: 0, summary: "发送失败", ok: false, at: new Date().toISOString(), format: formatLabel || "Markdown" });
-      setStatus(`发送失败: ${normalizeBridgeError(error)}`);
+      setNotice(`发送失败: ${normalizeError(e)}`);
     } finally {
       setLoading(false);
     }
-  }, [connection.connected, prefs, format, addSendHistory]);
+  }, [connection.connected, prefs, format, addSendHistory, syncedCards, setSyncedCards]);
 
-  const statusToast = useMemo(() => {
-    if (!status) return null;
-    return <div className="status-toast">{status}</div>;
-  }, [status]);
+  /* Synced cards polling — only sync-marked cards */
+  useEffect(() => {
+    if (!connection.connected || Object.keys(syncedCards).length === 0) return;
+    const poll = async () => {
+      try {
+        const [cardsResult, cacheResult] = await Promise.all([
+          MNBridge.send("listCards", { notebookId: "current-selection" }),
+          MNBridge.send("getCardVersionCache"),
+        ]);
+        const cards = Array.isArray(cardsResult?.cards) ? cardsResult.cards : [];
+        const cache = (cacheResult?.cards) || {};
+        const newCache = {};
+        let changed = false;
+
+        for (const card of cards) {
+          if (!card.id || !syncedCards[card.id]) {
+            if (cache[card.id]) newCache[card.id] = cache[card.id];
+            continue;
+          }
+          const contentKey = (card.title || "") + "|" + (card.excerpt || "") + "|" + (card.comment || "");
+          const cached = cache[card.id];
+          if (cached && (cached.contentKey === contentKey || cached.hash === contentKey)) {
+            newCache[card.id] = cache[card.id];
+            continue;
+          }
+          changed = true;
+          const version = (syncedCards[card.id]?.version || 0) + 1;
+          newCache[card.id] = { contentKey, version, at: new Date().toISOString() };
+          const updated = { ...syncedCards, [card.id]: { ...syncedCards[card.id], version } };
+          setSyncedCards(updated);
+          try {
+            await ostraconWsClient.sendCardUpdated({
+              noteId: card.id, title: card.title || "", excerpt: card.excerpt || "",
+              comment: card.comment || "", sourceAnchor: card.sourceAnchor || "",
+              version, hasImage: Boolean(card.hasImage), hasHandwriting: Boolean(card.hasHandwriting),
+            });
+          } catch (e) { console.log("cardUpdated send failed:", card.id); }
+        }
+        if (changed) {
+          await MNBridge.send("setCardVersionCache", { cards: newCache });
+          const syncedCopy = { ...syncedCards };
+          for (const card of cards) {
+            if (card.id && syncedCopy[card.id]) {
+              syncedCopy[card.id].version = newCache[card.id]?.version || syncedCopy[card.id].version;
+            }
+          }
+          setSyncedCards(syncedCopy);
+          MNBridge.send("setSyncedCards", { cards: syncedCopy }).catch(() => {});
+        }
+      } catch (_) {}
+    };
+    const t = setInterval(poll, 10000);
+    return () => clearInterval(t);
+  }, [connection.connected, syncedCards, setSyncedCards]);
+
+  const toast = useMemo(() => {
+    return notice ? <div className="status-toast">{notice}</div> : null;
+  }, [notice]);
+  const address = connection.connected ? `${connection.settings.host}:${connection.settings.port}` : "";
+  const isConnecting = connection.status === "connecting";
+  const handleTopStatusClick = useCallback(() => {
+    if (connection.connected) {
+      ostraconWsClient.disconnect();
+      setNotice("已断开");
+    }
+  }, [connection.connected]);
 
   return (
     <div className="app-shell">
-      <header className="top-bar">
-        <div className="brand"><strong>Ostracon</strong></div>
-        <div className="top-actions">
-          <button className="icon-button" onClick={() => setSettingsOpen(true)} type="button" title="设置">⚙</button>
-          <button className="icon-button" onClick={() => MNBridge.send("closePanel").catch(() => {})} type="button" title="关闭面板">×</button>
-        </div>
-      </header>
-
-      <ConnectionBar connection={connection} onTest={testConnection} onConnect={doConnect} onDisconnect={doDisconnect} />
-
-      {statusToast}
-
-      <div className="send-section">
-        <div className="format-toggle">
-          <span className="format-label">导出格式</span>
-          <button className={`format-btn ${format === "markdown" ? "active" : ""}`} onClick={() => setFormat("markdown")} type="button">Markdown</button>
-          <button className={`format-btn ${format === "canvas" ? "active" : ""}`} onClick={() => setFormat("canvas")} type="button">Canvas</button>
-        </div>
-
-        {format === "markdown" && (
-          <div className="option-bar">
-            <span className="option-label">卡片层级</span>
-            <button className={`chip ${prefs.mode === "flat" ? "active" : ""}`} onClick={() => setPrefs("mode", "flat")} type="button">平铺</button>
-            <button className={`chip ${prefs.mode === "tree" ? "active" : ""}`} onClick={() => setPrefs("mode", "tree")} type="button">树形</button>
-            <span className="chip-sep" />
-            <span className="option-label">摘录样式</span>
-            <button className={`chip ${prefs.excerptStyle === "quote" ? "active" : ""}`} onClick={() => setPrefs("excerptStyle", "quote")} type="button">引用</button>
-            <button className={`chip ${prefs.excerptStyle === "plain" ? "active" : ""}`} onClick={() => setPrefs("excerptStyle", "plain")} type="button">原文</button>
-          </div>
-        )}
-
-        <button className="primary-button send-button" disabled={loading} onClick={send} type="button">
-          {loading ? "处理中…" : "📤 发送到 Obsidian"}
-        </button>
+      <div className="top-bar">
+        <span className={`top-status${connection.connected ? " clickable" : ""}`} onClick={handleTopStatusClick}>
+          <span className={`status-dot ${connection.connected ? "on" : "off"}`} />
+          {connection.connected ? address : "未连接"}
+        </span>
       </div>
 
-      <details className="return-section">
-        <summary className="section-label">回流 (即将支持)</summary>
-        <div className="return-placeholder">
-          OB 整理后的总结、标签、复习提示将在这里展示。
+      {toast}
+
+      {!connection.connected && (
+        <div className="disconnect-area">
+          <strong>未连接到 Obsidian</strong>
+          <input className="connection-input" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="ws://127.0.0.1:27123?token=..." />
+          <button className="connect-btn" disabled={isConnecting || !parseConnectionUrl(urlInput)} onClick={doConnect} type="button">
+            {isConnecting ? "连接中..." : "连接"}
+          </button>
+          {!connection.connected && connection.lastError && <div className="connection-error">{connection.lastError}</div>}
+          <p className="disconnect-hint">在OB的Ostracon设置页复制连接串，粘贴到此</p>
         </div>
-      </details>
+      )}
 
-      <HistorySection history={sendHistory} />
+      {connection.connected && (
+        <>
+          <div className="send-area">
+            <div className="selection-info">{selectedCount > 0 ? `已选中 ${selectedCount} 张卡片` : "未选中卡片"}</div>
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+            <div className="send-btn-group">
+              <button className="send-btn" disabled={loading || selectedCount === 0} onClick={() => send(sendMode === "sync")} type="button">
+                {loading ? "处理中..." : sendMode === "sync" ? "📤 同步到Obsidian" : "📤 发送到Obsidian"}
+              </button>
+              <button className="send-btn-arrow" onClick={() => setDropdownOpen(!dropdownOpen)} type="button">▾</button>
+              {dropdownOpen && (
+                <div className="send-dropdown">
+                  <button className="send-dropdown-item" onClick={() => { setDropdownOpen(false); setSendMode("once"); }} type="button">
+                    {sendMode === "once" && "✓ "}发送一次
+                  </button>
+                  <button className="send-dropdown-item" onClick={() => { setDropdownOpen(false); setSendMode("sync"); }} type="button">
+                    {sendMode === "sync" && "✓ "}同步并自动更新
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="options-panel">
+              <div className="option-group">
+                <span className="option-label">格式</span>
+                <button className={`chip ${format === "markdown" ? "active" : ""}`} onClick={() => setFormat("markdown")} type="button">Markdown</button>
+                <button className={`chip ${format === "canvas" ? "active" : ""}`} onClick={() => setFormat("canvas")} type="button">Canvas</button>
+              </div>
+              <div className="option-group">
+                <span className="option-label">层级</span>
+                <button className={`chip ${prefs.mode === "flat" ? "active" : ""}`} onClick={() => setPrefs("mode", "flat")} type="button">平铺</button>
+                <button className={`chip ${prefs.mode === "tree" ? "active" : ""}`} onClick={() => setPrefs("mode", "tree")} type="button">树形</button>
+                <span className="chip-sep" />
+                <span className="option-label">摘录</span>
+                <button className={`chip ${prefs.excerptStyle === "quote" ? "active" : ""}`} onClick={() => setPrefs("excerptStyle", "quote")} type="button">引用</button>
+                <button className={`chip ${prefs.excerptStyle === "plain" ? "active" : ""}`} onClick={() => setPrefs("excerptStyle", "plain")} type="button">原文</button>
+              </div>
+            </div>
+          </div>
+
+          <HistorySection history={sendHistory} vaultName={connection.vaultName} />
+        </>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ const useBridgeStore = create((set) => ({
     serverSessionId: "",
   },
   sendHistory: [],
+  syncedCards: {},
   appendLog(entry) {
     set((state) => ({ logs: [entry, ...state.logs].slice(0, 50) }));
   },
@@ -31,6 +32,9 @@ const useBridgeStore = create((set) => ({
   },
   addSendHistory(entry) {
     set((state) => ({ sendHistory: [entry, ...state.sendHistory].slice(0, 20) }));
+  },
+  setSyncedCards(cards) {
+    set({ syncedCards: cards || {} });
   },
   clearLogs() {
     set({ logs: [] });

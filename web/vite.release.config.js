@@ -12,8 +12,20 @@ module.exports = defineConfig({
     outDir: path.resolve(__dirname, "../src/web-dist/assets"),
     emptyOutDir: false,
     sourcemap: false,
-    target: "es2018",
+    target: "es2015",
     cssCodeSplit: false,
+    minify: "terser",
+    terserOptions: {
+      ecma: 5,
+      compress: {
+        ecma: 5,
+        arrows: false,
+      },
+      format: {
+        ecma: 5,
+        comments: false,
+      },
+    },
     lib: {
       entry: path.resolve(__dirname, "src/main.jsx"),
       name: "MNWebPanelApp",
