@@ -3,6 +3,7 @@ JSB.require("CardSelectionService");
 JSB.require("OstraconUtils");
 JSB.require("MarkdownExportService");
 JSB.require("CanvasExportService");
+JSB.require("NoteChangeEvents");
 JSB.require("WebBridgeCommands");
 JSB.require("FrameManager");
 JSB.require("BridgeDispatcher");

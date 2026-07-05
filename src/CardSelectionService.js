@@ -359,6 +359,15 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return allDbNotes.map(summarizeDbNote);
   }
 
+  function listCardsByIds(context, cardIds) {
+    var db = Database.sharedInstance();
+    return cardIds.map(function (noteId) {
+      var note = db.getNoteById(String(noteId));
+      if (!note) throw new Error("MN中未找到此卡片: " + noteId);
+      return summarizeDbNote(note);
+    });
+  }
+
   return {
     getSelectedCards,
     getSelectedCardsInfo,
@@ -366,6 +375,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     listCurrentCards,
     listAllNotebooks,
     listAllCards,
+    listCardsByIds,
     arrayFromNSArray,
   };
 })();

@@ -1,7 +1,6 @@
 var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
   const PREFS_KEY = "mn_ostracon_markdown_prefs";
   const WS_SETTINGS_KEY = "mn_ostracon_ws_settings";
-  const CARD_CACHE_KEY = "mn_ostracon_card_cache";
   const SYNCED_CARDS_KEY = "mn_ostracon_synced_cards";
 
   function prefsStore() {
@@ -94,14 +93,14 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     if (!note) {
       throw new Error("MN中未找到此卡片: " + payload.noteId);
     }
+    if (Object.prototype.hasOwnProperty.call(payload, "comment") && String(payload.comment || "").trim()) {
+      throw new Error("评论回写需要替换语义，禁止使用追加写入");
+    }
 
     const topicid = note.notebookId;
     UndoManager.sharedInstance().undoGrouping("Ostracon同步", topicid, function () {
-      if (payload.title) note.noteTitle = payload.title;
-      if (payload.excerpt) note.excerptText = payload.excerpt;
-      if (payload.comment) {
-        note.appendMarkdownComment(payload.comment);
-      }
+      if (Object.prototype.hasOwnProperty.call(payload, "title")) note.noteTitle = String(payload.title || "");
+      if (Object.prototype.hasOwnProperty.call(payload, "excerpt")) note.excerptText = String(payload.excerpt || "");
     });
     Application.sharedInstance().refreshAfterDBChanged(topicid);
 
@@ -162,28 +161,6 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     return __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getSelectedCardsInfo(context);
   }
 
-  function getCardVersionCache(context, payload) {
-    return loadJsonObject(CARD_CACHE_KEY, { cards: {} });
-  }
-
-  function setCardVersionCache(context, payload) {
-    if (!payload || typeof payload !== "object") throw new Error("参数错误");
-    return saveJsonObject(CARD_CACHE_KEY, payload);
-  }
-
-  function computeContentHash(parts) {
-    var raw = "";
-    for (var i = 0; i < parts.length; i++) {
-      raw += String(parts[i] || "") + "|";
-    }
-    var hash = 0;
-    for (var i = 0; i < raw.length; i++) {
-      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash).toString(36);
-  }
-
   function listNotebooks(context) {
     return {
       notebooks: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listAllNotebooks(context),
@@ -192,13 +169,71 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
 
   function listCards(context, payload) {
     const notebookId = payload && payload.notebookId ? String(payload.notebookId) : "";
+    const cardIds = payload && Array.isArray(payload.cardIds) ? payload.cardIds.map(String) : [];
+    if (cardIds.length > 0) {
+      return {
+        notebookId: notebookId || "card-ids",
+        cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCardsByIds(context, cardIds),
+      };
+    }
     if (!notebookId) {
       throw new Error("缺少 notebookId");
+    }
+    if (notebookId === "current-selection") {
+      return {
+        notebookId,
+        cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCurrentCards(context),
+      };
     }
     return {
       notebookId,
       cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listAllCards(context, notebookId),
     };
+  }
+
+  function getNoteImageFlags(note) {
+    var hasImage = false;
+    var comments = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.arrayFromNSArray(note.comments);
+    comments.forEach(function (comment) {
+      if (comment && comment.type === "PaintNote") hasImage = true;
+    });
+    return { hasImage: hasImage, hasHandwriting: hasImage };
+  }
+
+  function renderCardsForSync(context, payload) {
+    const targets = payload && Array.isArray(payload.targets) ? payload.targets : [];
+    if (targets.length === 0) throw new Error("缺少同步目标");
+
+    const db = Database.sharedInstance();
+    const rendered = targets.map(function (target) {
+      const noteId = String(target && target.noteId ? target.noteId : "");
+      if (!noteId) throw new Error("同步目标缺少noteId");
+      const note = db.getNoteById(noteId);
+      if (!note) throw new Error("MN中未找到此卡片: " + noteId);
+
+      const format = target.format === "canvas" ? "canvas" : "markdown";
+      const renderOptions = target.renderOptions && typeof target.renderOptions === "object" ? target.renderOptions : {};
+      const flags = getNoteImageFlags(note);
+      if (format === "canvas") {
+        return {
+          ...__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.renderNodeTextForSync(note, renderOptions),
+          format,
+          filePath: String(target.filePath || ""),
+          sourceAnchor: "marginnote4app://note/" + noteId,
+          ...flags,
+        };
+      }
+
+      return {
+        ...__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.renderCardForSync(note, renderOptions),
+        format,
+        filePath: String(target.filePath || ""),
+        sourceAnchor: "marginnote4app://note/" + noteId,
+        ...flags,
+      };
+    });
+
+    return { rendered };
   }
 
   function fetchCards(context, payload) {
@@ -268,10 +303,9 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     getSelectedCardsInfo,
     listNotebooks,
     listCards,
+    renderCardsForSync,
     fetchCards,
     syncCard,
-    getCardVersionCache,
-    setCardVersionCache,
   };
 
   return { commands };

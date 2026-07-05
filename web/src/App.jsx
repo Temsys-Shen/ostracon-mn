@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MNBridge from "./lib/mnBridge";
 import { createPacketDraft, normalizePacket } from "./lib/ostraconContract";
 import ostraconWsClient from "./lib/ostraconWsClient";
@@ -29,6 +29,41 @@ function parseConnectionUrl(input) {
   return null;
 }
 
+function isTerminalTargetError(error) {
+  const message = normalizeError(error);
+  return /文件不存在|文件未包含noteId|文件未包含可更新的noteId标题|Canvas未包含noteId节点|Canvas JSON解析失败/i.test(message);
+}
+
+function createSyncRenderOptions(format, prefs = {}) {
+  if (format === "canvas") return { includeImages: true };
+  return {
+    mode: prefs.mode === "tree" ? "tree" : "flat",
+    excerptStyle: prefs.excerptStyle === "plain" ? "plain" : "quote",
+    includeImages: prefs.includeImages !== false,
+    includeNoteIds: true,
+  };
+}
+
+function normalizeTargets(entry) {
+  const rawTargets = Array.isArray(entry?.targets) && entry.targets.length > 0
+    ? entry.targets
+    : [{ filePath: entry?.filePath || "", format: entry?.format || "markdown", renderOptions: entry?.renderOptions }];
+  const seen = {};
+  return rawTargets
+    .map((target) => ({
+      filePath: String(target?.filePath || ""),
+      format: target?.format === "canvas" ? "canvas" : "markdown",
+      renderOptions: target?.renderOptions && typeof target.renderOptions === "object"
+        ? target.renderOptions
+        : createSyncRenderOptions(target?.format === "canvas" ? "canvas" : "markdown"),
+    }))
+    .filter((target) => {
+      if (!target.filePath || seen[target.filePath]) return false;
+      seen[target.filePath] = true;
+      return true;
+    });
+}
+
 /* ── History ── */
 
 function HistorySection({ history, vaultName }) {
@@ -37,7 +72,7 @@ function HistorySection({ history, vaultName }) {
   return (
     <div className="history-section">
       <div className="history-label">最近</div>
-      {history.slice(0, 8).map((entry, i) => (
+      {history.slice(0, 3).map((entry, i) => (
         <div className={`history-item ${entry.ok ? "ok" : "fail"}`} key={`${entry.at}-${i}`}>
           {entry.synced && <span className="history-sync-icon">🔄</span>}
           <span className="history-icon">{entry.ok ? "✓" : "✗"}</span>
@@ -64,6 +99,10 @@ export default function App() {
   const [urlInput, setUrlInput] = useState("");
   const [sendMode, setSendMode] = useState("once");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const syncedCardsRef = useRef({});
+  const inFlightByNoteIdRef = useRef({});
+  const pendingByNoteIdRef = useRef({});
+  const lastModifiedByNoteIdRef = useRef({});
 
   const connection = useBridgeStore((s) => s.connection);
   const sendHistory = useBridgeStore((s) => s.sendHistory);
@@ -73,22 +112,37 @@ export default function App() {
   const setConnection = useBridgeStore((s) => s.setConnection);
   const setSyncedCards = useBridgeStore((s) => s.setSyncedCards);
 
-  /* WS connection state */
+  useEffect(() => {
+    syncedCardsRef.current = syncedCards || {};
+  }, [syncedCards]);
+
+ /* WS connection state */
   useEffect(() => {
     setConnection(ostraconWsClient.getSnapshot());
+    let cancelled = false;
     ostraconWsClient.loadStoredSettings()
-      .then((snap) => {
+      .then(async (snap) => {
+        if (cancelled) return;
         setConnection(snap);
         const s = snap.settings;
         if (s.token) {
           setUrlInput(`ws://${s.host}:${s.port}?token=${encodeURIComponent(s.token)}`);
+          if (!snap.connected && snap.status !== "connecting") {
+            await ostraconWsClient.connect();
+          }
         }
       })
-      .catch((e) => setNotice(`设置读取失败: ${normalizeError(e)}`));
-    return ostraconWsClient.subscribe(({ event, snapshot }) => {
+      .catch((e) => {
+        if (!cancelled) setNotice(`连接失败: ${normalizeError(e)}`);
+      });
+    const unsubscribe = ostraconWsClient.subscribe(({ event, snapshot }) => {
       setConnection(snapshot);
       if (event?.type === "log") appendLog(event.entry);
     });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [appendLog, setConnection]);
 
   /* Load native prefs + synced cards */
@@ -186,10 +240,30 @@ export default function App() {
       if (autoSync && noteIds.length > 0 && filePath) {
         const updated = { ...syncedCards };
         for (const id of noteIds) {
-          if (!updated[id] || updated[id].filePath !== filePath) {
-            updated[id] = { filePath, version: 1, syncedAt: new Date().toISOString() };
+          const current = updated[id] || {};
+          const targets = Array.isArray(current.targets) ? current.targets.slice() : [];
+          if (current.filePath && !targets.some((target) => target.filePath === current.filePath)) {
+            const currentFormat = current.format === "canvas" ? "canvas" : "markdown";
+            targets.push({
+              filePath: current.filePath,
+              format: currentFormat,
+              renderOptions: current.renderOptions || createSyncRenderOptions(currentFormat, prefs),
+            });
           }
+          if (!targets.some((target) => target.filePath === filePath)) {
+            targets.push({ filePath, format, renderOptions: createSyncRenderOptions(format, prefs) });
+          }
+          updated[id] = {
+            ...current,
+            filePath,
+            format,
+            renderOptions: createSyncRenderOptions(format, prefs),
+            targets,
+            version: current.version || 1,
+            syncedAt: new Date().toISOString(),
+          };
         }
+        syncedCardsRef.current = updated;
         setSyncedCards(updated);
         MNBridge.send("setSyncedCards", { cards: updated }).catch(() => {});
       }
@@ -201,60 +275,183 @@ export default function App() {
     }
   }, [connection.connected, prefs, format, addSendHistory, syncedCards, setSyncedCards]);
 
-  /* Synced cards polling — only sync-marked cards */
-  useEffect(() => {
-    if (!connection.connected || Object.keys(syncedCards).length === 0) return;
-    const poll = async () => {
-      try {
-        const [cardsResult, cacheResult] = await Promise.all([
-          MNBridge.send("listCards", { notebookId: "current-selection" }),
-          MNBridge.send("getCardVersionCache"),
-        ]);
-        const cards = Array.isArray(cardsResult?.cards) ? cardsResult.cards : [];
-        const cache = (cacheResult?.cards) || {};
-        const newCache = {};
-        let changed = false;
+  const persistSyncedCards = useCallback((cards) => {
+    syncedCardsRef.current = cards;
+    setSyncedCards(cards);
+    MNBridge.send("setSyncedCards", { cards }).catch((error) => {
+      console.warn("同步登记保存失败", normalizeError(error));
+    });
+  }, [setSyncedCards]);
 
-        for (const card of cards) {
-          if (!card.id || !syncedCards[card.id]) {
-            if (cache[card.id]) newCache[card.id] = cache[card.id];
-            continue;
-          }
-          const contentKey = (card.title || "") + "|" + (card.excerpt || "") + "|" + (card.comment || "");
-          const cached = cache[card.id];
-          if (cached && (cached.contentKey === contentKey || cached.hash === contentKey)) {
-            newCache[card.id] = cache[card.id];
-            continue;
-          }
-          changed = true;
-          const version = (syncedCards[card.id]?.version || 0) + 1;
-          newCache[card.id] = { contentKey, version, at: new Date().toISOString() };
-          const updated = { ...syncedCards, [card.id]: { ...syncedCards[card.id], version } };
-          setSyncedCards(updated);
-          try {
-            await ostraconWsClient.sendCardUpdated({
-              noteId: card.id, title: card.title || "", excerpt: card.excerpt || "",
-              comment: card.comment || "", sourceAnchor: card.sourceAnchor || "",
-              version, hasImage: Boolean(card.hasImage), hasHandwriting: Boolean(card.hasHandwriting),
-            });
-          } catch (e) { console.log("cardUpdated send failed:", card.id); }
+  const syncChangedCard = useCallback(async (change) => {
+    const noteId = String(change?.noteId || "");
+    if (!noteId) return;
+    console.log("[OstraconSync] native change", {
+      noteId,
+      modifiedDate: change?.modifiedDate || "",
+      notebookId: change?.notebookId || "",
+    });
+
+    const snapshot = ostraconWsClient.getSnapshot();
+    if (!snapshot.connected) {
+      console.warn("事件同步跳过: WebSocket已断开", { noteId });
+      return;
+    }
+
+    const current = syncedCardsRef.current[noteId];
+    if (!current) {
+      console.warn("事件同步跳过: noteId未登记自动同步", { noteId });
+      return;
+    }
+
+    const targets = normalizeTargets(current);
+    if (targets.length === 0) {
+      console.warn("事件同步跳过: 没有同步目标", { noteId });
+      return;
+    }
+
+    const modifiedDate = String(change?.modifiedDate || "");
+    if (modifiedDate && lastModifiedByNoteIdRef.current[noteId] === modifiedDate) {
+      console.log("[OstraconSync] duplicate modifiedDate skipped", { noteId, modifiedDate });
+      return;
+    }
+    if (modifiedDate) lastModifiedByNoteIdRef.current[noteId] = modifiedDate;
+    console.log("[OstraconSync] syncing targets", { noteId, targetCount: targets.length });
+
+    let renderResult;
+    try {
+      const result = await MNBridge.send("renderCardsForSync", {
+        targets: targets.map((target) => ({
+          noteId,
+          filePath: target.filePath,
+          format: target.format,
+          renderOptions: target.renderOptions,
+        })),
+      }, 12000);
+      renderResult = Array.isArray(result?.rendered) ? result.rendered : [];
+    } catch (error) {
+      console.warn("事件同步渲染卡片失败", { noteId, message: normalizeError(error) });
+      return;
+    }
+    if (renderResult.length === 0) {
+      console.warn("事件同步渲染卡片失败", { noteId, message: "MN未返回渲染结果" });
+      return;
+    }
+    console.log("[OstraconSync] rendered card", { noteId, targetCount: renderResult.length });
+
+    const version = Number(current.version || 0) + 1;
+    const failedTerminalPaths = {};
+    let successCount = 0;
+    const warnings = [];
+    const terminalWarnings = [];
+
+    for (const target of targets) {
+      const rendered = renderResult.find((item) => item.filePath === target.filePath && item.format === target.format);
+      if (!rendered) {
+        warnings.push({ noteId, filePath: target.filePath, message: "MN未返回目标渲染结果" });
+        continue;
+      }
+      try {
+        await ostraconWsClient.sendCardUpdated({
+          noteId,
+          title: rendered.title || "",
+          excerpt: "",
+          comment: "",
+          sourceAnchor: rendered.sourceAnchor || "",
+          filePath: target.filePath,
+          format: target.format,
+          markdownSection: rendered.markdownSection || "",
+          canvasText: rendered.canvasText || "",
+          version,
+          hasImage: Boolean(rendered.hasImage),
+          hasHandwriting: Boolean(rendered.hasHandwriting),
+        });
+        successCount += 1;
+        console.log("[OstraconSync] target updated", { noteId, filePath: target.filePath, format: target.format });
+      } catch (error) {
+        const message = normalizeError(error);
+        if (isTerminalTargetError(error)) {
+          failedTerminalPaths[target.filePath] = true;
+          terminalWarnings.push({ noteId, filePath: target.filePath, message });
+        } else {
+          warnings.push({ noteId, filePath: target.filePath, message });
         }
-        if (changed) {
-          await MNBridge.send("setCardVersionCache", { cards: newCache });
-          const syncedCopy = { ...syncedCards };
-          for (const card of cards) {
-            if (card.id && syncedCopy[card.id]) {
-              syncedCopy[card.id].version = newCache[card.id]?.version || syncedCopy[card.id].version;
-            }
-          }
-          setSyncedCards(syncedCopy);
-          MNBridge.send("setSyncedCards", { cards: syncedCopy }).catch(() => {});
+      }
+    }
+
+    if (terminalWarnings.length > 0) {
+      console.warn(`事件同步移除失效目标${terminalWarnings.length}项`, terminalWarnings);
+    }
+
+    if (warnings.length > 0) {
+      console.warn(`事件同步失败${warnings.length}项`, warnings);
+    }
+
+    const terminalPaths = Object.keys(failedTerminalPaths);
+    if (successCount === 0 && terminalPaths.length === 0) return;
+    console.log("[OstraconSync] sync result", { noteId, successCount, removedTargetCount: terminalPaths.length });
+
+    const nextSyncedCards = { ...syncedCardsRef.current };
+    const latest = nextSyncedCards[noteId] || current;
+    const nextTargets = targets.filter((target) => !failedTerminalPaths[target.filePath]);
+
+    if (nextTargets.length === 0) {
+      delete nextSyncedCards[noteId];
+    } else {
+      nextSyncedCards[noteId] = {
+        ...latest,
+        targets: nextTargets,
+        filePath: nextTargets[nextTargets.length - 1].filePath,
+        format: nextTargets[nextTargets.length - 1].format,
+        version: successCount > 0 ? version : latest.version,
+        syncedAt: new Date().toISOString(),
+      };
+    }
+
+    persistSyncedCards(nextSyncedCards);
+  }, [persistSyncedCards]);
+
+  const queueNativeCardChange = useCallback((change) => {
+    const noteId = String(change?.noteId || "");
+    if (!noteId) return;
+    if (inFlightByNoteIdRef.current[noteId]) {
+      pendingByNoteIdRef.current[noteId] = change;
+      return;
+    }
+
+    const run = async (nextChange) => {
+      inFlightByNoteIdRef.current[noteId] = true;
+      try {
+        await syncChangedCard(nextChange);
+      } finally {
+        const pending = pendingByNoteIdRef.current[noteId];
+        delete pendingByNoteIdRef.current[noteId];
+        if (pending) {
+          run(pending);
+        } else {
+          delete inFlightByNoteIdRef.current[noteId];
         }
-      } catch (_) {}
+      }
     };
-    const t = setInterval(poll, 10000);
-    return () => clearInterval(t);
-  }, [connection.connected, syncedCards, setSyncedCards]);
+
+    run(change);
+  }, [syncChangedCard]);
+
+  /* Native note change events */
+  useEffect(() => {
+    window.__OstraconNativeCardChanged = (raw) => {
+      try {
+        const change = typeof raw === "string" ? JSON.parse(raw) : raw;
+        console.log("[OstraconSync] web handler received", change);
+        queueNativeCardChange(change);
+      } catch (error) {
+        console.warn("原生卡片事件解析失败", normalizeError(error));
+      }
+    };
+    return () => {
+      delete window.__OstraconNativeCardChanged;
+    };
+  }, [queueNativeCardChange]);
 
   const toast = useMemo(() => {
     return notice ? <div className="status-toast">{notice}</div> : null;

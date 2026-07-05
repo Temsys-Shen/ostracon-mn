@@ -589,7 +589,6 @@ class OstraconWsClient {
       this.pendingRequests.delete(message.requestId);
       this.setState({
         pendingCount: this.pendingRequests.size,
-        lastError: message.payload && message.payload.message ? message.payload.message : "WebSocket error",
       });
       clearTimeout(pending.timer);
       pending.reject(new Error(message.payload && message.payload.message ? message.payload.message : "WebSocket error"));
@@ -651,9 +650,6 @@ class OstraconWsClient {
         });
         break;
       case "error":
-        this.setState({
-          lastError: message.payload && message.payload.message ? message.payload.message : "WebSocket error",
-        });
         this.log("error", "收到OB错误", message.payload || null);
         break;
       case "command":
@@ -845,7 +841,7 @@ class OstraconWsClient {
         payload,
       },
       {
-        resolveOn: ["ack"],
+        resolveOn: ["sync_result"],
       },
     );
   }
