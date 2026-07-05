@@ -1,25 +1,8 @@
 var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
-  function arrayFromNSArray(value) {
-    return __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.arrayFromNSArray(value);
-  }
-
-  function normalizeText(value) {
-    if (value === undefined || value === null) return "";
-    return String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-  }
-
-  function imageDataURI(paintHash) {
-    try {
-      var data = Database.sharedInstance().getMediaByHash(paintHash);
-      if (!data) return null;
-      var b64 = data.base64Encoding();
-      if (b64 && typeof b64 === "string") return "data:image/png;base64," + b64;
-      console.log("[Ostracon] canvas imageDataURI failed:", typeof b64);
-    } catch (e) {
-      console.log("[Ostracon] canvas imageDataURI error:", String(e));
-    }
-    return null;
-  }
+  var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
+  var normalizeText = _utils.normalizeText;
+  var imageDataURI = _utils.imageDataURI;
+  var arrayFromNSArray = _utils.arrayFromNSArray;
 
   function nodeText(note, includeImages) {
     var lines = [];

@@ -21,7 +21,7 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
         includeImages: stored.includeImages !== false,
       };
     }
-    return { mode: "flat", excerptStyle: "quote", includeImages: true };
+    return __MN_OSTRACON_UTILS_MNOstraconAddon.DEFAULT_MD_OPTIONS;
   }
 
   function savePrefs(prefs) {

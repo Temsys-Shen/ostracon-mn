@@ -1,12 +1,8 @@
 var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
-  function arrayFromNSArray(value) {
-    return __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.arrayFromNSArray(value);
-  }
-
-  function normalizeText(value) {
-    if (value === undefined || value === null) return "";
-    return String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-  }
+  var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
+  var normalizeText = _utils.normalizeText;
+  var imageDataURI = _utils.imageDataURI;
+  var arrayFromNSArray = _utils.arrayFromNSArray;
 
   function sanitizeFilePart(value) {
     return normalizeText(value).replace(/[^A-Za-z0-9._\u4e00-\u9fff-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "unknown";
@@ -70,19 +66,6 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       const nestedLevel = baseHeadingLevel + match[1].length;
       return `${headingPrefix(nestedLevel, warnings)} ${match[2]}`;
     }).join("\n");
-  }
-
-  function imageDataURI(paintHash) {
-    try {
-      const data = Database.sharedInstance().getMediaByHash(paintHash);
-      if (!data) return null;
-      var base64 = data.base64Encoding();
-      if (base64 && typeof base64 === "string") return `data:image/png;base64,${base64}`;
-      console.log("[Ostracon] base64Encoding returned:", typeof base64);
-    } catch (e) {
-      console.log("[Ostracon] imageDataURI error:", String(e));
-    }
-    return null;
   }
 
   function appendPaintComment(lines, note, comment, commentIndex, options) {
