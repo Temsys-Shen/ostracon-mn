@@ -232,26 +232,22 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  function textOf(value) {
-    if (value === undefined || value === null) return "";
-    return String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
-  }
-
   function summarizeNote(node) {
     const note = node.note;
     const comments = arrayFromNSArray(note.comments);
     let firstTextComment = "";
     let hasImage = false;
+    const _normalizeText = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeText;
     comments.forEach(function (comment) {
       if (!comment || !comment.type) return;
-      if (!firstTextComment && comment.type === "TextNote") firstTextComment = textOf(comment.text);
+      if (!firstTextComment && comment.type === "TextNote") firstTextComment = _normalizeText(comment.text);
       if (comment.type === "PaintNote") hasImage = true;
     });
 
     return {
       id: node.noteId,
-      title: textOf(note.noteTitle) || "未命名卡片",
-      excerpt: textOf(note.excerptText),
+      title: _normalizeText(note.noteTitle) || "未命名卡片",
+      excerpt: _normalizeText(note.excerptText),
       comment: firstTextComment,
       sourceAnchor: "marginnote4app://note/" + node.noteId,
       selected: true,
@@ -302,20 +298,21 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   function summarizeDbNote(note) {
     var firstTextComment = "";
     var hasImage = false;
+    var _normalizeText = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeText;
     try {
       var comments = arrayFromNSArray(note.comments);
       for (var i = 0; i < comments.length; i++) {
         var comment = comments[i];
         if (!comment || !comment.type) continue;
-        if (!firstTextComment && comment.type === "TextNote") firstTextComment = textOf(comment.text);
+        if (!firstTextComment && comment.type === "TextNote") firstTextComment = _normalizeText(comment.text);
         if (comment.type === "PaintNote") hasImage = true;
       }
     } catch (_) {}
 
     return {
       id: String(note.noteId || ""),
-      title: textOf(note.noteTitle) || "未命名卡片",
-      excerpt: textOf(note.excerptText),
+      title: _normalizeText(note.noteTitle) || "未命名卡片",
+      excerpt: _normalizeText(note.excerptText),
       comment: firstTextComment,
       sourceAnchor: "marginnote4app://note/" + String(note.noteId || ""),
       selected: false,

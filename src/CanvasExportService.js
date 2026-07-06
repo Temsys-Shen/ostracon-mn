@@ -3,6 +3,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var normalizeText = _utils.normalizeText;
   var imageDataURI = _utils.imageDataURI;
   var arrayFromNSArray = _utils.arrayFromNSArray;
+  var MN_COLORS = _utils.MN_COLORS;
 
   function nodeText(note, includeImages) {
     var lines = [];
@@ -259,7 +260,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var treeRoots = selectionResult.treeRoots;
 
     var nodes = flatCards.map(function (card) {
-      return {
+      var node = {
         id: card.noteId,
         type: "text",
         x: 0,
@@ -268,6 +269,10 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
         height: estimateHeight(nodeText(card.note, includeImages)),
         text: nodeText(card.note, includeImages),
       };
+      if (card.note.colorIndex >= 0) {
+        node.color = MN_COLORS[card.note.colorIndex];
+      }
+      return node;
     });
 
     var nodesById = {};
@@ -275,7 +280,43 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
       nodesById[node.id] = node;
     });
 
-    var positions = contourLayout(treeRoots, LAYOUT_CONFIG, nodesById);
+    var nodeMap = {};
+    flatCards.forEach(function (card) {
+      nodeMap[card.noteId] = { isSummary: card.note.summary === true };
+    });
+
+    /* ── 从树中剪掉 summary 卡片，记录它们的上级 ── */
+    function pruneTree(roots) {
+      var removed = {};
+      function walk(n, parentId) {
+        if (nodeMap[n.noteId] && nodeMap[n.noteId].isSummary) {
+          removed[n.noteId] = parentId;
+          var promoted = [];
+          n.children.forEach(function (c) {
+            var r = walk(c, n.noteId);
+            if (r) promoted = promoted.concat(r);
+          });
+          return promoted;
+        }
+        var kids = [];
+        n.children.forEach(function (c) {
+          var r = walk(c, n.noteId);
+          if (r) kids = kids.concat(r);
+        });
+        return [{ noteId: n.noteId, children: kids }];
+      }
+      var out = [];
+      roots.forEach(function (r) {
+        var r2 = walk(r, null);
+        if (r2) out = out.concat(r2);
+      });
+      return { roots: out, removed: removed };
+    }
+
+    var pruned = pruneTree(treeRoots);
+    var summaryParents = pruned.removed;
+
+    var positions = contourLayout(pruned.roots, LAYOUT_CONFIG, nodesById);
 
     nodes.forEach(function (node) {
       if (positions[node.id]) {
@@ -291,6 +332,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     function walkTree(node) {
       node.children.forEach(function (child) {
         if (!node.noteId || !child.noteId) return;
+        if (nodeMap[child.noteId] && nodeMap[child.noteId].isSummary) return;
         var fromNode = nodesById[node.noteId];
         var toNode = nodesById[child.noteId];
         var side = computeEdgeSide(fromNode, toNode);
@@ -305,6 +347,89 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
       });
     }
     treeRoots.forEach(walkTree);
+
+    /* ── summary 卡片：放在上级的子树右侧 ── */
+    function subtreeRightEdge(parentId, roots) {
+      var ids = {};
+      function collect(n) {
+        ids[n.noteId] = true;
+        n.children.forEach(collect);
+      }
+      function find(ns) {
+        for (var i = 0; i < ns.length; i++) {
+          if (ns[i].noteId === parentId) { collect(ns[i]); return true; }
+          if (find(ns[i].children)) return true;
+        }
+        return false;
+      }
+      if (!find(roots)) return null;
+      var right;
+      nodes.forEach(function (n) {
+        if (ids[n.id]) {
+          var r = n.x + n.width;
+          if (right === undefined || r > right) right = r;
+        }
+      });
+      return right;
+    }
+
+    var SUMMARY_GAP = 24;
+    var summaryCards = flatCards.filter(function (card) { return card.note.summary === true; });
+    summaryCards.forEach(function (card) {
+      var summaryId = card.noteId;
+      var summaryNode = nodesById[summaryId];
+      if (!summaryNode) return;
+      var linkIds = arrayFromNSArray(card.note.summaryLinks);
+
+      /* 收集已在画布上的被引用卡片，计算 x/y */
+      var refs = [];
+      linkIds.forEach(function (uuid) {
+        var child = nodesById[uuid];
+        if (child) refs.push(child);
+      });
+
+      if (refs.length > 0) {
+        var maxRight = 0, sumY = 0;
+        refs.forEach(function (r) {
+          var rEdge = r.x + r.width;
+          if (rEdge > maxRight) maxRight = rEdge;
+          sumY += r.y;
+        });
+        summaryNode.x = maxRight + LAYOUT_CONFIG.horizontalGap;
+        summaryNode.y = Math.round(sumY / refs.length);
+      } else {
+        var right = summaryParents[summaryId] ? subtreeRightEdge(summaryParents[summaryId], pruned.roots) : null;
+        summaryNode.x = right !== null ? right + LAYOUT_CONFIG.horizontalGap * 2 : LAYOUT_CONFIG.baseX;
+        summaryNode.y = LAYOUT_CONFIG.baseY;
+      }
+
+      /* 不在画布上的子卡片从 DB 取出，堆在 summary 下方 */
+      var cursorY = summaryNode.y + summaryNode.height + SUMMARY_GAP;
+      linkIds.forEach(function (uuid) {
+        var existing = nodesById[uuid];
+        if (!existing) {
+          var childNote = Database.sharedInstance().getNoteById(uuid);
+          if (!childNote) return;
+          var childNode = {
+            id: uuid, type: "text",
+            x: summaryNode.x, y: cursorY,
+            width: LAYOUT_CONFIG.nodeWidth,
+            height: estimateHeight(nodeText(childNote, includeImages)),
+            text: nodeText(childNote, includeImages),
+          };
+          if (childNote.colorIndex >= 0) {
+            childNode.color = MN_COLORS[childNote.colorIndex];
+          }
+          nodes.push(childNode);
+          nodesById[uuid] = childNode;
+          cursorY = childNode.y + childNode.height + SUMMARY_GAP;
+        }
+        edges.push({
+          id: createId(), fromNode: uuid, fromSide: "right",
+          toNode: summaryId, toSide: "left",
+        });
+      });
+    });
 
     var canvasObj = { nodes: nodes, edges: edges };
     return {

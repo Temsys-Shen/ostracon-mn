@@ -39,7 +39,8 @@ button:focus-visible, input:focus-visible {
   display: flex;
   flex-direction: column;
   padding: 6px;
-  gap: 6px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* ── Top bar ── */
@@ -262,6 +263,88 @@ button:focus-visible, input:focus-visible {
   color: var(--subtle);
   text-align: center;
   max-width: 280px;
+}
+
+/* ── Discovery ── */
+
+.discovery-section {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.scan-btn {
+  height: 30px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--control);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  align-self: center;
+}
+.scan-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.scan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.discovered-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.discovered-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 80ms;
+}
+.discovered-item:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.server-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.server-host {
+  font-size: 11px;
+  color: var(--subtle);
+  font-family: "SF Mono", "Menlo", monospace;
+}
+
+/* ── Approval waiting ── */
+
+.approval-waiting {
+  max-width: 300px;
+  padding: 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
 }
 
 /* ── Status toast ── */

@@ -1,17 +1,7 @@
 var __MN_NOTE_CHANGE_EVENTS_MNOstraconAddon = (function () {
   const NOTIFICATION_NAME = "ReloadDigestNotes";
   const WEB_HANDLER = "__OstraconNativeCardChanged";
-
-  function getValue(obj, key) {
-    if (!obj) return null;
-    if (typeof obj.objectForKey === "function") return obj.objectForKey(key);
-    return obj[key];
-  }
-
-  function getNoteId(note) {
-    if (!note) return "";
-    return String(note.noteId || note.noteid || note.id || "");
-  }
+  var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
 
   function install(context) {
     const center = NSNotificationCenter.defaultCenter();
@@ -26,11 +16,11 @@ var __MN_NOTE_CHANGE_EVENTS_MNOstraconAddon = (function () {
 
   function handleNotification(context, notification) {
     const userInfo = notification ? notification.userInfo : null;
-    const command = String(getValue(userInfo, "command") || "");
+    const command = String(_utils.getValue(userInfo, "command") || "");
     if (command !== "modify") return;
 
-    const note = getValue(userInfo, "note");
-    const noteId = getNoteId(note);
+    const note = _utils.getValue(userInfo, "note");
+    const noteId = _utils.getNoteId(note);
     if (!noteId) return;
 
     const payload = {

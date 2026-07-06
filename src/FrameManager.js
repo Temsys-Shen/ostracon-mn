@@ -161,22 +161,19 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
   }
 
   return {
-    normalizeBounds: normalizeBounds,
     createDefaultFrame: createDefaultFrame,
-    isFullscreenLike: isFullscreenLike,
     normalizePanelFrame: normalizePanelFrame,
-    framesEqual: framesEqual,
     applyRootFrame: applyRootFrame,
     getStudyRootBounds: getStudyRootBounds,
     saveWebPanelFrame: saveWebPanelFrame,
     applyDefaultFrame: applyDefaultFrame,
     applySavedOrDefaultFrame: applySavedOrDefaultFrame,
     keepPanelWithinStudyBounds: keepPanelWithinStudyBounds,
-    numberOr: numberOr,
+    DEFAULT_WIDTH: DEFAULT_WIDTH,
+    DEFAULT_HEIGHT: DEFAULT_HEIGHT,
     MIN_WIDTH: MIN_WIDTH,
     MIN_HEIGHT: MIN_HEIGHT,
     PANEL_MARGIN: PANEL_MARGIN,
-    FRAME_CONFIG_KEY: FRAME_CONFIG_KEY,
     PANEL_ON_KEY: PANEL_ON_KEY,
   };
 })();

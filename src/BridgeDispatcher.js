@@ -7,7 +7,11 @@ var __MN_BRIDGE_DISPATCHER_MNOstraconAddon = (function () {
   }
 
   function encodeBridgeJSON(value) {
-    return JSON.stringify(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return JSON.stringify(value)
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/\u2028/g, "\\u2028")
+      .replace(/\u2029/g, "\\u2029");
   }
 
   function decodeBridgeMessage(requestURL) {

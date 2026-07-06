@@ -21,7 +21,19 @@ var __MN_OSTRACON_UTILS_MNOstraconAddon = (function () {
     return __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.arrayFromNSArray(value);
   }
 
-  var DEFAULT_MD_OPTIONS = { mode: "flat", excerptStyle: "quote", includeImages: true };
+  function getValue(obj, key) {
+    if (!obj) return null;
+    if (typeof obj.objectForKey === "function") return obj.objectForKey(key);
+    return obj[key];
+  }
 
-  return { normalizeText, imageDataURI, arrayFromNSArray, DEFAULT_MD_OPTIONS };
+  function getNoteId(note) {
+    if (!note) return "";
+    return String(note.noteId || note.noteid || note.id || "");
+  }
+
+  var DEFAULT_MD_OPTIONS = { mode: "flat", excerptStyle: "quote", includeImages: true, includeBacklinks: true };
+  var MN_COLORS = ["#FFFFAA", "#BEFFBE", "#ADD2FF", "#FFAABE", "#FFFF00", "#00FF00", "#00BEFF", "#FF0000", "#FF8000", "#008040", "#003EB3", "#CF1B11", "#FFFFFF", "#DADADA", "#B4B4B4", "#C39DE0"];
+
+  return { normalizeText, imageDataURI, arrayFromNSArray, getValue, getNoteId, DEFAULT_MD_OPTIONS, MN_COLORS };
 })();

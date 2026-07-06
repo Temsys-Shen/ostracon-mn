@@ -15,6 +15,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       excerptStyle: src.excerptStyle === "plain" ? "plain" : "quote",
       includeImages: src.includeImages !== false,
       includeNoteIds: Boolean(src.includeNoteIds),
+      includeBacklinks: src.includeBacklinks !== false,
     };
   }
 

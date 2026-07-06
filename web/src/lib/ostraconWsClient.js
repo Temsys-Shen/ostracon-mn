@@ -1,23 +1,13 @@
 import MNBridge from "./mnBridge";
 import { createPacketDraft, normalizePacket } from "./ostraconContract";
+import { createId, nowIso } from "./idUtils";
 
-const STORAGE_KEY = "ostracon-mn-ws-settings";
 const DEFAULT_PORT = 27123;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30000;
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1000;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const MAX_TRACKED_MESSAGES = 1000;
-
-function createId(prefix) {
-  const time = Date.now().toString(36);
-  const random = Math.random().toString(36).slice(2, 8);
-  return `${prefix}-${time}-${random}`;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
 
 function toInteger(value, fallback) {
   const parsed = parseInt(value, 10);
@@ -32,7 +22,7 @@ function normalizeSettings(value = {}) {
   return {
     host: trimString(value.host) || "127.0.0.1",
     port: toInteger(value.port, DEFAULT_PORT),
-    token: trimString(value.token),
+    clientId: trimString(value.clientId) || "",
     autoReconnect: value.autoReconnect !== false,
     heartbeatIntervalMs: Math.max(5000, toInteger(value.heartbeatIntervalMs, DEFAULT_HEARTBEAT_INTERVAL_MS)),
     reconnectBaseDelayMs: Math.max(250, toInteger(value.reconnectBaseDelayMs, DEFAULT_RECONNECT_BASE_DELAY_MS)),
@@ -44,30 +34,17 @@ function createDefaultSettings() {
   return normalizeSettings();
 }
 
-function loadSettings() {
-  return createDefaultSettings();
-}
-
-function readLegacySettings() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-  return normalizeSettings(JSON.parse(raw));
-}
-
-function clearLegacySettings() {
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-}
-
-function buildConnectionUrl(settings, sessionId) {
+function buildConnectionUrl(settings, sessionId, clientId) {
   const safeSettings = normalizeSettings(settings);
-  const token = encodeURIComponent(safeSettings.token);
   const session = encodeURIComponent(sessionId || "");
-  return `ws://${safeSettings.host}:${safeSettings.port}?token=${token}&session=${session}`;
+  const cid = encodeURIComponent(clientId || "");
+  // "::" is a bind address (all interfaces), not a connect address. Use IPv6 loopback instead.
+  let host = safeSettings.host;
+  if (host === "::") host = "::1";
+  // Strip existing brackets to avoid double-bracketing
+  const clean = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  const hostPart = clean.includes(":") ? `[${clean}]` : clean;
+  return `ws://${hostPart}:${safeSettings.port}?session=${session}&clientId=${cid}`;
 }
 
 function buildClientHelloPayload(settings, sessionId, clientId) {
@@ -102,11 +79,64 @@ function createRequestId(prefix) {
   return createId(prefix);
 }
 
+const WS_STATE_TRANSITIONS = {
+  idle:             ["connecting"],
+  connecting:       ["connected", "error", "disconnected", "pending_approval"],
+  connected:        ["ready", "error", "disconnected", "pending_approval"],
+  ready:            ["error", "disconnected", "reconnecting"],
+  reconnecting:     ["connecting", "error", "disconnected"],
+  error:            ["disconnected", "connecting"],
+  disconnected:     ["connecting", "idle"],
+  closed:           ["connecting", "idle"],
+  pending_approval: ["ready", "error", "disconnected"],
+};
+
+const WS_STATE_BY = {
+  open:             { status: "connected",     socketState: "open",   connected: true },
+  connecting:       { status: "connecting",    socketState: "connecting", connected: false, ready: false },
+  disconnect:       { status: "disconnected",  socketState: "closed", connected: false, ready: false },
+  error:            { status: "error",         socketState: "closed" },
+  close:            { status: "closed",        socketState: "closed", connected: false, ready: false },
+  reconnecting:     { status: "reconnecting" },
+  ready:            { status: "ready",         ready: true },
+  pending_approval: { status: "pending_approval", connected: true, ready: false },
+};
+
+const SERVER_COMMAND_HANDLERS = {
+  async listNotebooks(self, requestId, payload) {
+    const result = await MNBridge.send("listNotebooks", payload);
+    self.sendResult(requestId, result);
+  },
+  async listCards(self, requestId, payload) {
+    const result = await MNBridge.send("listCards", payload);
+    self.sendResult(requestId, result);
+  },
+  async fetchCards(self, requestId, payload) {
+    const result = await MNBridge.send("fetchCards", payload);
+    const format = result && result.format === "canvas" ? "canvas" : "markdown";
+    const content = format === "canvas" ? result.canvas : result.markdown;
+    const packet = normalizePacket(createPacketDraft({
+      markdown: content,
+      sourceTitle: result.fileBaseName || "MarginNote",
+      folder: "Inbox",
+      format,
+      isCanvas: format === "canvas",
+      objects: Array.isArray(result.cards) ? result.cards : null,
+    }));
+    self.sendResult(requestId, { ok: true, packet, noteCount: result.noteCount || packet.objects.length });
+  },
+  async syncCard(self, requestId, payload) {
+    const result = await MNBridge.send("syncCard", payload);
+    self.sendResult(requestId, result);
+  },
+};
+
 class OstraconWsClient {
   constructor() {
     this.listeners = new Set();
-    this.settings = loadSettings();
+    this.settings = createDefaultSettings();
     this.settingsReady = false;
+    // Use a temporary clientId; the real one will be loaded from NSUserDefaults in loadStoredSettings()
     this.clientId = createId("mn-client");
     this.sessionId = createId("mn-session");
     this.socket = null;
@@ -193,6 +223,19 @@ class OstraconWsClient {
     });
   }
 
+  transitionTo(event) {
+    const target = WS_STATE_BY[event];
+    if (!target) {
+      console.warn(`Unknown state transition event: ${event}`);
+      return;
+    }
+    const allowed = WS_STATE_TRANSITIONS[this.state.status];
+    if (!allowed || !allowed.includes(target.status)) {
+      console.warn(`Invalid state transition: ${this.state.status} -> ${target.status} (via ${event})`);
+    }
+    this.setState(target);
+  }
+
   updateSettings(patch) {
     const nextSettings = normalizeSettings({
       ...this.settings,
@@ -220,28 +263,58 @@ class OstraconWsClient {
       nativeSettings = null;
     }
     let nextSettings = normalizeSettings(nativeSettings || {});
-    const legacySettings = readLegacySettings();
-    if (legacySettings && legacySettings.token && !nextSettings.token) {
-      nextSettings = legacySettings;
-      await MNBridge.send("setWsSettings", nextSettings);
-      clearLegacySettings();
+
+    // Migrate legacy localStorage settings if present
+    try {
+      if (typeof window !== "undefined") {
+        const raw = window.localStorage.getItem("ostracon-mn-ws-settings");
+        if (raw) {
+          const legacy = normalizeSettings(JSON.parse(raw));
+          nextSettings = legacy;
+          await MNBridge.send("setWsSettings", nextSettings);
+          window.localStorage.removeItem("ostracon-mn-ws-settings");
+        }
+      }
+    } catch (_) {
+      // ignore migration errors
     }
+
+    // Load clientId from NSUserDefaults
+    let persistedClientId = "";
+    try {
+      const result = await MNBridge.send("getClientId");
+      if (result && typeof result === "string" && result.length > 0) {
+        persistedClientId = result;
+      }
+    } catch (e) {
+      // no persisted clientId yet
+    }
+
+    if (persistedClientId) {
+      this.clientId = persistedClientId;
+    } else {
+      // Persist the temp clientId to NSUserDefaults
+      try {
+        await MNBridge.send("setClientId", { clientId: this.clientId });
+      } catch (e) {
+        // ignore save errors
+      }
+    }
+
     this.settings = nextSettings;
     this.settingsReady = true;
     this.setState({
       settings: nextSettings,
+      clientId: this.clientId,
     });
     return this.getSnapshot();
   }
 
   buildConnectionUrl() {
-    return buildConnectionUrl(this.settings, this.sessionId);
+    return buildConnectionUrl(this.settings, this.sessionId, this.clientId);
   }
 
   validateSettings() {
-    if (!this.settings.token) {
-      throw new Error("Obsidian token is required before connecting");
-    }
     if (!isFinite(this.settings.port) || this.settings.port <= 0) {
       throw new Error(`Invalid WebSocket port: ${this.settings.port}`);
     }
@@ -273,10 +346,7 @@ class OstraconWsClient {
 
     const connectionUrl = this.buildConnectionUrl();
     this.setState({
-      status: "connecting",
-      socketState: "connecting",
-      connected: false,
-      ready: false,
+      ...WS_STATE_BY.connecting,
       connectionUrl,
       lastError: "",
       lastClose: null,
@@ -309,7 +379,7 @@ class OstraconWsClient {
           this.socket.close(1000, "connect timeout");
         }
         this.setState({
-          status: "error",
+          ...WS_STATE_BY.error,
           socketState: "closed",
           connected: false,
           ready: false,
@@ -322,7 +392,7 @@ class OstraconWsClient {
         this.socket = new WebSocket(connectionUrl);
       } catch (error) {
         this.setState({
-          status: "error",
+          ...WS_STATE_BY.error,
           socketState: "closed",
           lastError: error.message || String(error),
         });
@@ -336,9 +406,7 @@ class OstraconWsClient {
           this.connectTimer = null;
         }
         this.setState({
-          status: "connected",
-          socketState: "open",
-          connected: true,
+          ...WS_STATE_BY.open,
           lastError: "",
         });
         this.log("info", "WebSocket已连接", {
@@ -384,10 +452,7 @@ class OstraconWsClient {
     }
     this.socket = null;
     this.setState({
-      status: "disconnected",
-      socketState: "closed",
-      connected: false,
-      ready: false,
+      ...WS_STATE_BY.disconnect,
     });
     this.log("info", "已断开WebSocket连接");
   }
@@ -457,15 +522,13 @@ class OstraconWsClient {
     });
 
     if (this.manualDisconnect) {
-      this.setState({
-        status: "disconnected",
-      });
+      this.setState(WS_STATE_BY.disconnect);
       return;
     }
 
     if (!this.shouldReconnect) {
       this.setState({
-        status: "closed",
+        ...WS_STATE_BY.close,
         lastError: event.reason || `WebSocket closed with code ${event.code}`,
       });
       return;
@@ -474,7 +537,7 @@ class OstraconWsClient {
     if (event.code === 4001 || event.code === 4003 || event.code === 1008) {
       this.shouldReconnect = false;
       this.setState({
-        status: "error",
+        ...WS_STATE_BY.error,
         lastError: event.reason || `Connection rejected with code ${event.code}`,
       });
       return;
@@ -491,7 +554,7 @@ class OstraconWsClient {
     );
 
     this.setState({
-      status: "reconnecting",
+      ...WS_STATE_BY.reconnecting,
       reconnectCount: this.reconnectCount,
     });
     this.log("info", "准备重连WebSocket", {
@@ -598,8 +661,7 @@ class OstraconWsClient {
     switch (message.type) {
       case "hello":
         this.setState({
-          ready: true,
-          status: "ready",
+          ...WS_STATE_BY.ready,
           serverSessionId: message.payload && message.payload.sessionId ? message.payload.sessionId : "",
           vaultName: message.payload && message.payload.vaultName ? message.payload.vaultName : "",
           lastHello: {
@@ -611,6 +673,20 @@ class OstraconWsClient {
         this.log("info", "收到OB hello", {
           sessionId: message.payload && message.payload.sessionId ? message.payload.sessionId : "",
         });
+        break;
+      case "pending_approval":
+        this.setState({
+          ...WS_STATE_BY.pending_approval,
+          lastError: "",
+        });
+        this.log("info", "等待OB端确认连接...");
+        break;
+      case "approved":
+        this.setState({
+          ...WS_STATE_BY.ready,
+          lastError: "",
+        });
+        this.log("info", "OB端已批准连接");
         break;
       case "ack":
         this.setState({
@@ -671,46 +747,14 @@ class OstraconWsClient {
       return;
     }
 
+    const handler = SERVER_COMMAND_HANDLERS[command];
+    if (!handler) {
+      this.sendCommandError(message.requestId, command, new Error(`不支持的OB命令: ${command}`));
+      return;
+    }
+
     try {
-      if (command === "listNotebooks") {
-        const result = await MNBridge.send("listNotebooks", message.payload || {});
-        this.sendResult(message.requestId, result);
-        return;
-      }
-
-      if (command === "listCards") {
-        const result = await MNBridge.send("listCards", message.payload || {});
-        this.sendResult(message.requestId, result);
-        return;
-      }
-
-      if (command === "fetchCards") {
-        const result = await MNBridge.send("fetchCards", message.payload || {});
-        const format = result && result.format === "canvas" ? "canvas" : "markdown";
-        const content = format === "canvas" ? result.canvas : result.markdown;
-        const packet = normalizePacket(createPacketDraft({
-          markdown: content,
-          sourceTitle: result.fileBaseName || "MarginNote",
-          folder: "Inbox",
-          format,
-          isCanvas: format === "canvas",
-          objects: Array.isArray(result.cards) ? result.cards : null,
-        }));
-        this.sendResult(message.requestId, {
-          ok: true,
-          packet,
-          noteCount: result.noteCount || packet.objects.length,
-        });
-        return;
-      }
-
-      if (command === "syncCard") {
-        const result = await MNBridge.send("syncCard", message.payload || {});
-        this.sendResult(message.requestId, result);
-        return;
-      }
-
-      throw new Error(`不支持的OB命令: ${command}`);
+      await handler(this, message.requestId, message.payload || {});
     } catch (error) {
       this.sendCommandError(message.requestId, command, error);
       this.log("error", "处理OB命令失败", {
@@ -852,7 +896,6 @@ const ostraconWsClient = new OstraconWsClient();
 export {
   createDefaultSettings,
   createRequestId,
-  loadSettings,
   normalizeSettings,
 };
 

@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { createDefaultSettings } from "../lib/ostraconWsClient";
 
 const useBridgeStore = create((set) => ({
-  logs: [],
   connection: {
     status: "idle",
     socketState: "closed",
@@ -24,9 +23,6 @@ const useBridgeStore = create((set) => ({
   },
   sendHistory: [],
   syncedCards: {},
-  appendLog(entry) {
-    set((state) => ({ logs: [entry, ...state.logs].slice(0, 50) }));
-  },
   setConnection(snapshot) {
     set({ connection: snapshot });
   },
@@ -35,9 +31,6 @@ const useBridgeStore = create((set) => ({
   },
   setSyncedCards(cards) {
     set({ syncedCards: cards || {} });
-  },
-  clearLogs() {
-    set({ logs: [] });
   },
 }));
 

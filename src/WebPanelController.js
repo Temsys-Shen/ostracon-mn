@@ -52,8 +52,8 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.view.layer.shadowColor = UIColor.blackColor();
     controller.view.layer.masksToBounds = false;
 
-    var initWidth = 960;
-    var initHeight = 640;
+    var initWidth = _fm.DEFAULT_WIDTH;
+    var initHeight = _fm.DEFAULT_HEIGHT;
 
     controller._isMaximized = false;
 
