@@ -42,10 +42,15 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     listCards: __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.listCards,
     getSyncedCards: __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon.getSyncedCards,
     setSyncedCards: __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon.setSyncedCards,
+    getSyncedScopes: __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon.getSyncedScopes,
+    setSyncedScopes: __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon.setSyncedScopes,
     syncCard: __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon.syncCard,
     renderCardsForSync: __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon.renderCardsForSync,
     previewSelectedMarkdown: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.previewSelectedMarkdown,
     previewSelectedCanvas: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.previewSelectedCanvas,
+    previewScopeMarkdown: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.previewScopeMarkdown,
+    previewScopeCanvas: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.previewScopeCanvas,
+    listScopeCards: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.listScopeCards,
     fetchCards: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.fetchCards,
   };
 

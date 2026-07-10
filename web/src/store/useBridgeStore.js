@@ -23,6 +23,7 @@ const useBridgeStore = create((set) => ({
   },
   sendHistory: [],
   syncedCards: {},
+  syncedScopes: {},
   setConnection(snapshot) {
     set({ connection: snapshot });
   },
@@ -31,6 +32,9 @@ const useBridgeStore = create((set) => ({
   },
   setSyncedCards(cards) {
     set({ syncedCards: cards || {} });
+  },
+  setSyncedScopes(scopes) {
+    set({ syncedScopes: scopes || {} });
   },
 }));
 

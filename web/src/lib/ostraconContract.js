@@ -16,7 +16,7 @@ function createPacketDraft({
   objects = null,
 } = {}) {
   const now = new Date().toISOString();
-  const packetObjects = Array.isArray(objects) && objects.length > 0
+  const packetObjects = Array.isArray(objects)
     ? objects.map(item => ({
       id: item.id || createId("card"),
       kind: item.kind || "Card",
@@ -76,7 +76,7 @@ function normalizePacket(packet) {
   if (packet.version !== 1) throw new Error(`Unsupported packet version: ${packet.version}`);
   if (!packet.id || typeof packet.id !== "string") throw new Error("Packet missing id");
   if (!packet.source || typeof packet.source !== "object") throw new Error("Packet missing source");
-  if (!Array.isArray(packet.objects) || packet.objects.length === 0) throw new Error("Packet must contain at least one object");
+  if (!Array.isArray(packet.objects)) throw new Error("Packet objects must be an array");
 
   return {
     version: 1,

@@ -32,8 +32,27 @@ var __MN_OSTRACON_UTILS_MNOstraconAddon = (function () {
     return String(note.noteId || note.noteid || note.id || "");
   }
 
+  var DEFAULT_TITLE_FALLBACK_MAX_LENGTH = 30;
+
+  function usesExcerptAsTitle(note) {
+    var title = normalizeText(note ? note.noteTitle : "");
+    if (title) return false;
+    var excerpt = normalizeText(note ? note.excerptText : "");
+    return Boolean(excerpt && excerpt.length <= DEFAULT_TITLE_FALLBACK_MAX_LENGTH);
+  }
+
+  function resolveNoteTitle(note, options) {
+    var title = normalizeText(note ? note.noteTitle : "");
+    if (title) return title;
+
+    var excerpt = normalizeText(note ? note.excerptText : "");
+    if (usesExcerptAsTitle(note)) return excerpt;
+
+    return "Untitled Card";
+  }
+
   var DEFAULT_MD_OPTIONS = { mode: "flat", excerptStyle: "quote", includeImages: true, includeBacklinks: true };
   var MN_COLORS = ["#FFFFAA", "#BEFFBE", "#ADD2FF", "#FFAABE", "#FFFF00", "#00FF00", "#00BEFF", "#FF0000", "#FF8000", "#008040", "#003EB3", "#CF1B11", "#FFFFFF", "#DADADA", "#B4B4B4", "#C39DE0"];
 
-  return { normalizeText, imageDataURI, arrayFromNSArray, getValue, getNoteId, DEFAULT_MD_OPTIONS, MN_COLORS };
+  return { normalizeText, imageDataURI, arrayFromNSArray, getValue, getNoteId, usesExcerptAsTitle, resolveNoteTitle, DEFAULT_MD_OPTIONS, MN_COLORS };
 })();

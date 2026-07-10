@@ -112,7 +112,7 @@ const SERVER_COMMAND_HANDLERS = {
     self.sendResult(requestId, result);
   },
   async fetchCards(self, requestId, payload) {
-    const result = await MNBridge.send("fetchCards", payload);
+    const result = await MNBridge.send("fetchCards", payload, 30000);
     const format = result && result.format === "canvas" ? "canvas" : "markdown";
     const content = format === "canvas" ? result.canvas : result.markdown;
     const packet = normalizePacket(createPacketDraft({
@@ -253,6 +253,15 @@ class OstraconWsClient {
       autoReconnect: nextSettings.autoReconnect,
     });
     return MNBridge.send("setWsSettings", nextSettings);
+  }
+
+  clearLastError() {
+    if (!this.state.lastError) {
+      return;
+    }
+    this.setState({
+      lastError: "",
+    });
   }
 
   async loadStoredSettings() {
@@ -859,15 +868,18 @@ class OstraconWsClient {
     );
   }
 
-  sendPacket(packet, autoSync = false) {
+  sendPacket(packet, autoSync = false, targetFilePath = "") {
     const normalized = normalizePacket(packet);
+    const payload = autoSync
+      ? { packet: normalized, autoSynced: true, targetFilePath: targetFilePath || "" }
+      : normalized;
     return this.request(
       {
         type: "command",
         command: "submitPacket",
         clientId: this.clientId,
         sessionId: this.sessionId,
-        payload: autoSync ? { packet: normalized, autoSynced: true } : normalized,
+        payload,
       },
       {
         resolveOn: ["sync_result"],

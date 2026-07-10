@@ -58,11 +58,11 @@ function TopBar({ connection, onStatusClick }) {
   );
 }
 
-function ConnectionPanel({ urlInput, setUrlInput, isConnecting, onConnect, connection, discoveredServers, scanning, onScan, onConnectToServer }) {
+function ConnectionPanel({ urlInput, onUrlInputChange, isConnecting, onConnect, connection, discoveredServers, scanning, onScan, onConnectToServer }) {
   return (
     <div className="disconnect-area">
       <strong>未连接到 Obsidian</strong>
-      <input className="connection-input" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="ws://[::1]:27123" />
+      <input className="connection-input" value={urlInput} onChange={(e) => onUrlInputChange(e.target.value)} placeholder="ws://[::1]:27123" />
       <button className="connect-btn" disabled={isConnecting || !parseConnectionUrl(urlInput)} onClick={onConnect} type="button">
         {isConnecting ? "连接中..." : "连接"}
       </button>
@@ -93,7 +93,6 @@ function ConnectionPanel({ urlInput, setUrlInput, isConnecting, onConnect, conne
         <div className="approval-waiting">等待 OB 端确认连接...</div>
       )}
 
-      {!connection.connected && connection.lastError && <div className="connection-error">{connection.lastError}</div>}
       <p className="disconnect-hint">在OB的Ostracon设置页复制连接串，或点击扫描自动发现</p>
     </div>
   );
@@ -125,8 +124,15 @@ function OptionsPanel({ format, setFormat, prefs, setPrefs }) {
   );
 }
 
-function SendArea({ loading, selectedCount, send, sendMode, setSendMode, dropdownOpen, setDropdownOpen }) {
+function scopeSelectionLabel(selectedCount) {
+  return selectedCount > 0 ? `选中${selectedCount}张` : "未选中卡片";
+}
+
+function SendArea({ loading, selectedCount, send, sendMode, setSendMode, sendScope, setSendScope, dropdownOpen, setDropdownOpen }) {
   const groupRef = useRef(null);
+  const canSync = sendScope !== "mindmap";
+  const sendDisabled = loading || (sendScope === "selection" && selectedCount === 0);
+  const singleAction = !canSync;
   useEffect(() => {
     if (!dropdownOpen) return;
     const handler = (e) => {
@@ -140,14 +146,18 @@ function SendArea({ loading, selectedCount, send, sendMode, setSendMode, dropdow
 
   return (
     <div className="send-area">
-      <div className="selection-info">{selectedCount > 0 ? `已选中 ${selectedCount} 张卡片` : "未选中卡片"}</div>
+      <div className="scope-selector" role="radiogroup" aria-label="发送范围">
+        <button className={`chip ${sendScope === "notebook" ? "active" : ""}`} onClick={() => setSendScope("notebook")} type="button">学习集</button>
+        <button className={`chip ${sendScope === "mindmap" ? "active" : ""}`} onClick={() => setSendScope("mindmap")} type="button">当前脑图</button>
+        <button className={`chip ${sendScope === "selection" ? "active" : ""}`} onClick={() => setSendScope("selection")} type="button">{scopeSelectionLabel(selectedCount)}</button>
+      </div>
 
-      <div className="send-btn-group" ref={groupRef}>
-        <button className="send-btn" disabled={loading || selectedCount === 0} onClick={() => send(sendMode === "sync")} type="button">
-          {loading ? "处理中..." : sendMode === "sync" ? "📤 同步到Obsidian" : "📤 发送到Obsidian"}
+      <div className={`send-btn-group ${singleAction ? "single-action" : ""}`} ref={groupRef}>
+        <button className="send-btn" disabled={sendDisabled} onClick={() => send({ autoSync: canSync && sendMode === "sync", scope: sendScope })} type="button">
+          {loading ? "处理中..." : canSync && sendMode === "sync" ? "📤 同步到Obsidian" : "📤 发送到Obsidian"}
         </button>
-        <button className="send-btn-arrow" onClick={() => setDropdownOpen(!dropdownOpen)} type="button">▾</button>
-        {dropdownOpen && (
+        {!singleAction && <button className="send-btn-arrow" onClick={() => setDropdownOpen(!dropdownOpen)} type="button">▾</button>}
+        {!singleAction && dropdownOpen && (
           <div className="send-dropdown">
             <button className="send-dropdown-item" onClick={() => { setDropdownOpen(false); setSendMode("once"); }} type="button">
               {sendMode === "once" && "✓ "}发送一次
@@ -165,31 +175,40 @@ function SendArea({ loading, selectedCount, send, sendMode, setSendMode, dropdow
 /* ── App ── */
 
 export default function App() {
-  const [prefs, setPrefsState] = useState({ mode: "flat", excerptStyle: "quote" });
+  const [prefs, setPrefsState] = useState({ mode: "flat", excerptStyle: "quote", includeBacklinks: true });
   const [format, setFormat] = useState("markdown");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [selectedCount, setSelectedCount] = useState(0);
   const [urlInput, setUrlInput] = useState("");
   const [sendMode, setSendMode] = useState("once");
+  const [sendScope, setSendScope] = useState("selection");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const connection = useBridgeStore((s) => s.connection);
   const sendHistory = useBridgeStore((s) => s.sendHistory);
   const syncedCards = useBridgeStore((s) => s.syncedCards);
+  const syncedScopes = useBridgeStore((s) => s.syncedScopes);
   const addSendHistory = useBridgeStore((s) => s.addSendHistory);
   const setConnection = useBridgeStore((s) => s.setConnection);
   const setSyncedCards = useBridgeStore((s) => s.setSyncedCards);
+  const setSyncedScopes = useBridgeStore((s) => s.setSyncedScopes);
 
-  useConnection(setConnection, setUrlInput, setNotice);
+  const { doConnect } = useConnection(setConnection, setUrlInput, setNotice);
   const { discoveredServers, scanning, startScan } = useDiscovery();
-  const { setPrefs } = usePreferences(setPrefsState, setSyncedCards, setNotice);
+  const { setPrefs } = usePreferences(setPrefsState, setSyncedCards, setSyncedScopes, setNotice);
   useSelectionPolling(connection.connected, setSelectedCount);
 
   const { send } = useSync({
-    connection, prefs, format, syncedCards,
-    setSyncedCards, addSendHistory, setNotice, setLoading,
+    connection, prefs, format, syncedCards, syncedScopes,
+    setSyncedCards, setSyncedScopes, addSendHistory, setNotice, setLoading,
   });
+
+  useEffect(() => {
+    if (sendScope === "mindmap" && sendMode === "sync") {
+      setSendMode("once");
+    }
+  }, [sendScope, sendMode]);
 
   const isConnecting = connection.status === "connecting";
   const handleTopStatusClick = useCallback(() => {
@@ -199,12 +218,25 @@ export default function App() {
     }
   }, [connection.connected]);
 
+  const handleUrlInputChange = useCallback((value) => {
+    setUrlInput(value);
+    setNotice("");
+    ostraconWsClient.clearLastError();
+  }, []);
+
+  const handleScan = useCallback(() => {
+    setNotice("");
+    ostraconWsClient.clearLastError();
+    startScan();
+  }, [startScan]);
+
   const handleConnectToServer = useCallback(
     async (server) => {
       const host = server.host || server.name;
       const port = server.port || 27123;
       const url = formatWsUrl(host, port);
       setUrlInput(url);
+      ostraconWsClient.clearLastError();
       const parsed = parseConnectionUrl(url);
       if (!parsed) {
         setNotice("无法解析服务地址: " + url);
@@ -217,7 +249,7 @@ export default function App() {
         setNotice("");
       } catch (e) {
         const snap = ostraconWsClient.getSnapshot();
-        if (!snap.lastError) setNotice(`连接失败: ${normalizeError(e)}`);
+        setNotice(`连接失败: ${snap.lastError || normalizeError(e)}`);
       }
     },
     [setNotice, setUrlInput],
@@ -235,21 +267,13 @@ export default function App() {
       {(!connection.connected || connection.status === "pending_approval") && (
         <ConnectionPanel
           urlInput={urlInput}
-          setUrlInput={setUrlInput}
+          onUrlInputChange={handleUrlInputChange}
           isConnecting={isConnecting}
-          onConnect={() => {
-            const parsed = parseConnectionUrl(urlInput);
-            if (!parsed) { setNotice("请输入有效的连接串"); return; }
-            setNotice("");
-            ostraconWsClient.updateSettings(parsed).then(() => ostraconWsClient.connect()).then(() => setNotice("")).catch((e) => {
-              const snap = ostraconWsClient.getSnapshot();
-              if (!snap.lastError) setNotice(`连接失败: ${normalizeError(e)}`);
-            });
-          }}
+          onConnect={() => doConnect(urlInput)}
           connection={connection}
           discoveredServers={discoveredServers}
           scanning={scanning}
-          onScan={startScan}
+          onScan={handleScan}
           onConnectToServer={handleConnectToServer}
         />
       )}
@@ -262,6 +286,8 @@ export default function App() {
             send={send}
             sendMode={sendMode}
             setSendMode={setSendMode}
+            sendScope={sendScope}
+            setSendScope={setSendScope}
             dropdownOpen={dropdownOpen}
             setDropdownOpen={setDropdownOpen}
           />

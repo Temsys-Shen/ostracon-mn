@@ -84,6 +84,14 @@ button:focus-visible, input:focus-visible {
   padding: 16px 10px;
 }
 
+.scope-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .selection-info {
   font-size: 13px;
   color: var(--muted);
@@ -110,6 +118,9 @@ button:focus-visible, input:focus-visible {
 }
 .send-btn:hover:not(:disabled) { background: #1a5ad0; }
 .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.send-btn-group.single-action .send-btn {
+  border-radius: 12px;
+}
 
 .send-btn-arrow {
   width: 36px;
@@ -247,15 +258,6 @@ button:focus-visible, input:focus-visible {
 .connect-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.connection-error {
-  max-width: 300px;
-  color: var(--error);
-  font-size: 11px;
-  line-height: 1.4;
-  text-align: center;
-  word-break: break-word;
 }
 
 .disconnect-hint {

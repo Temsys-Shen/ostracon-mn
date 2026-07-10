@@ -27,6 +27,15 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return mindmapView.selViewLst || [];
   }
 
+  function getNotebookController(context) {
+    const studyController = getStudyController(context);
+    const notebookController = studyController.notebookController;
+    if (!notebookController) {
+      throw new Error("notebookController not found");
+    }
+    return notebookController;
+  }
+
   function arrayFromNSArray(value) {
     if (!value) return [];
     if (Array.isArray(value)) return value;
@@ -182,6 +191,61 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return result;
   }
 
+  function buildNoteTree(note, selectionIndex, depth) {
+    const children = arrayFromNSArray(note.childNotes).map(function (childNote, childIndex) {
+      return buildNoteTree(childNote, selectionIndex + "-" + childIndex, depth + 1);
+    });
+    return {
+      note,
+      noteId: String(note.noteId || ""),
+      selectionIndex,
+      x: 0,
+      y: Number(String(selectionIndex).split("-")[0]) || 0,
+      depth,
+      children,
+    };
+  }
+
+  function selectionFromRootNotes(rootNotes) {
+    const treeRoots = rootNotes.map(function (note, index) {
+      return buildNoteTree(note, index, 0);
+    });
+    const treeCards = flattenTreeNodes(treeRoots);
+    const flatCards = treeCards.map(function (card, index) {
+      return {
+        note: card.note,
+        noteId: card.noteId,
+        selectionIndex: index,
+        x: 0,
+        y: index,
+        depth: 0,
+        children: [],
+      };
+    });
+    return { flatCards, treeRoots, treeCards };
+  }
+
+  function selectionFromMindmapNodes(nodes) {
+    const indexed = indexSelectedNodes(nodes);
+    const roots = getTreeRoots(indexed.orderedNodes, indexed.selectedById);
+    const flatCards = indexed.orderedNodes.map(function (node) {
+      return {
+        note: node.note,
+        noteId: node.noteId,
+        selectionIndex: node.selectionIndex,
+        x: node.x,
+        y: node.y,
+        depth: 0,
+        children: [],
+      };
+    });
+    return {
+      flatCards,
+      treeRoots: roots,
+      treeCards: flattenTreeNodes(roots),
+    };
+  }
+
   function getSelectedCards(context) {
     const items = arrayFromNSArray(getSelectedViews(context));
     const indexed = indexSelectedNodes(items);
@@ -210,11 +274,15 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     const indexed = indexSelectedNodes(items);
     const firstCard = indexed.orderedNodes[0];
     const note = firstCard ? firstCard.note : null;
+    const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
 
     let totalComments = 0;
     let totalImages = 0;
     indexed.orderedNodes.forEach(function (node) {
       const comments = node.note ? arrayFromNSArray(node.note.comments) : [];
+      if (node.note && node.note.excerptPic && node.note.excerptPic.paint) {
+        totalImages += 1;
+      }
       totalComments += comments.length;
       comments.forEach(function (comment) {
         if (comment && comment.type === "PaintNote") {
@@ -227,7 +295,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
       noteCount: indexed.orderedNodes.length,
       imageCount: totalImages,
       commentCount: totalComments,
-      sourceTitle: note && note.noteTitle ? String(note.noteTitle) : "",
+      sourceTitle: note ? __MN_OSTRACON_UTILS_MNOstraconAddon.resolveNoteTitle(note, prefs) : "",
       noteIds: indexed.orderedNodes.map(function (node) { return node.noteId; }),
     };
   }
@@ -237,17 +305,21 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     const comments = arrayFromNSArray(note.comments);
     let firstTextComment = "";
     let hasImage = false;
-    const _normalizeText = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeText;
+    const _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
+    const _normalizeText = _utils.normalizeText;
+    const _usesExcerptAsTitle = _utils.usesExcerptAsTitle;
+    const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
     comments.forEach(function (comment) {
       if (!comment || !comment.type) return;
       if (!firstTextComment && comment.type === "TextNote") firstTextComment = _normalizeText(comment.text);
       if (comment.type === "PaintNote") hasImage = true;
     });
+    if (note.excerptPic && note.excerptPic.paint) hasImage = true;
 
     return {
       id: node.noteId,
-      title: _normalizeText(note.noteTitle) || "未命名卡片",
-      excerpt: _normalizeText(note.excerptText),
+      title: _utils.resolveNoteTitle(note, prefs),
+      excerpt: _usesExcerptAsTitle(note) ? "" : _normalizeText(note.excerptText),
       comment: firstTextComment,
       sourceAnchor: "marginnote4app://note/" + node.noteId,
       selected: true,
@@ -270,6 +342,53 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   function listCurrentCards(context) {
     const selection = getSelectedCards(context);
     return selection.flatCards.map(summarizeNote);
+  }
+
+  function getNotebookScopeById(notebookId) {
+    var db = Database.sharedInstance();
+    if (!notebookId) throw new Error("缺少当前学习集ID");
+    var notebook = db.getNotebookById(notebookId);
+    if (!notebook) throw new Error("未找到笔记本: " + notebookId);
+    return {
+      id: notebookId,
+      title: String(notebook.title || "当前学习集"),
+      selection: selectionFromRootNotes(arrayFromNSArray(notebook.notes)),
+    };
+  }
+
+  function getCurrentNotebookScope(context) {
+    var notebookController = getNotebookController(context);
+    var notebookId = notebookController.notebookId ? String(notebookController.notebookId) : "";
+    return getNotebookScopeById(notebookId);
+  }
+
+  function getCurrentMindmapScope(context) {
+    var notebookController = getNotebookController(context);
+    var mindmapView = notebookController.mindmapView;
+    if (!mindmapView) throw new Error("mindmapView not found");
+    var nodes = arrayFromNSArray(mindmapView.mindmapNodes);
+    return {
+      id: "current-mindmap",
+      title: "当前脑图",
+      selection: selectionFromMindmapNodes(nodes),
+    };
+  }
+
+  function getScopeSelection(context, scopeType, options) {
+    if (scopeType === "notebook") {
+      var notebookId = options && options.notebookId ? String(options.notebookId) : "";
+      return notebookId ? getNotebookScopeById(notebookId) : getCurrentNotebookScope(context);
+    }
+    if (scopeType === "mindmap") return getCurrentMindmapScope(context);
+    return {
+      id: "selection",
+      title: "选中卡片",
+      selection: getSelectedCards(context),
+    };
+  }
+
+  function listScopeCards(context, scopeType, options) {
+    return getScopeSelection(context, scopeType, options).selection.flatCards.map(summarizeNote);
   }
 
   function countAllNotes(notes) {
@@ -298,7 +417,10 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   function summarizeDbNote(note) {
     var firstTextComment = "";
     var hasImage = false;
-    var _normalizeText = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeText;
+    var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
+    var _normalizeText = _utils.normalizeText;
+    var _usesExcerptAsTitle = _utils.usesExcerptAsTitle;
+    var prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
     try {
       var comments = arrayFromNSArray(note.comments);
       for (var i = 0; i < comments.length; i++) {
@@ -307,12 +429,13 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
         if (!firstTextComment && comment.type === "TextNote") firstTextComment = _normalizeText(comment.text);
         if (comment.type === "PaintNote") hasImage = true;
       }
+      if (note.excerptPic && note.excerptPic.paint) hasImage = true;
     } catch (_) {}
 
     return {
       id: String(note.noteId || ""),
-      title: _normalizeText(note.noteTitle) || "未命名卡片",
-      excerpt: _normalizeText(note.excerptText),
+      title: _utils.resolveNoteTitle(note, prefs),
+      excerpt: _usesExcerptAsTitle(note) ? "" : _normalizeText(note.excerptText),
       comment: firstTextComment,
       sourceAnchor: "marginnote4app://note/" + String(note.noteId || ""),
       selected: false,
@@ -365,14 +488,41 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     });
   }
 
+  function getCardsByIds(cardIds) {
+    var db = Database.sharedInstance();
+    var cards = cardIds.map(function (noteId, index) {
+      var id = String(noteId);
+      var note = db.getNoteById(id);
+      if (!note) throw new Error("MN中未找到此卡片: " + id);
+      return {
+        note: note,
+        noteId: String(note.noteId || id),
+        selectionIndex: index,
+        x: 0,
+        y: index,
+        depth: 0,
+        children: [],
+      };
+    });
+
+    return {
+      flatCards: cards,
+      treeRoots: cards,
+      treeCards: cards,
+    };
+  }
+
   return {
     getSelectedCards,
     getSelectedCardsInfo,
     getCurrentNotebookInfo,
     listCurrentCards,
+    getScopeSelection,
+    listScopeCards,
     listAllNotebooks,
     listAllCards,
     listCardsByIds,
+    getCardsByIds,
     arrayFromNSArray,
   };
 })();

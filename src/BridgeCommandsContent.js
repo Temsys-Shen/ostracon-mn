@@ -12,20 +12,8 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
       };
     }
 
-    var markdown = result.markdown;
-    if (mergedPrefs.includeBacklinks) {
-      var backlinks = ["", "## MarginNote Links", ""];
-      selection.flatCards.forEach(function (card) {
-        var note = card.note;
-        var title = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeText(note ? note.noteTitle : "") || "Untitled Card";
-        backlinks.push("- [" + title + "](marginnote4app://note/" + card.noteId + ")");
-      });
-      backlinks.push("");
-      markdown += backlinks.join("\n");
-    }
-
     return {
-      markdown: markdown,
+      markdown: result.markdown,
       noteCount: result.noteCount,
       fileBaseName: result.fileBaseName,
       warnings: result.warnings,
@@ -42,31 +30,67 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     };
   }
 
+  function normalizeScopeType(payload) {
+    const scope = payload && payload.scope ? String(payload.scope) : "selection";
+    if (scope === "notebook" || scope === "mindmap") return scope;
+    return "selection";
+  }
+
+  function previewScopeMarkdown(context, payload) {
+    const scope = normalizeScopeType(payload);
+    const scopeResult = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getScopeSelection(context, scope, payload || {});
+    const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
+    const mergedPrefs = { ...prefs, ...(payload && payload.options ? payload.options : payload || {}) };
+    const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(scopeResult.selection, mergedPrefs);
+    return {
+      scope,
+      scopeId: scopeResult.id,
+      scopeTitle: scopeResult.title,
+      markdown: result.markdown,
+      noteCount: result.noteCount,
+      fileBaseName: scopeResult.title || result.fileBaseName,
+      warnings: result.warnings,
+    };
+  }
+
+  function previewScopeCanvas(context, payload) {
+    const scope = normalizeScopeType(payload);
+    const scopeResult = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getScopeSelection(context, scope, payload || {});
+    const options = { ...(payload && payload.options ? payload.options : {}), ...(payload || {}) };
+    const result = __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(scopeResult.selection, options);
+    return {
+      scope,
+      scopeId: scopeResult.id,
+      scopeTitle: scopeResult.title,
+      canvas: result.canvas,
+      nodeCount: result.nodeCount,
+      edgeCount: result.edgeCount,
+      fileBaseName: scopeResult.title || "ostracon-canvas",
+    };
+  }
+
+  function listScopeCards(context, payload) {
+    const scope = normalizeScopeType(payload);
+    const scopeResult = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getScopeSelection(context, scope, payload || {});
+    return {
+      scope,
+      scopeId: scopeResult.id,
+      scopeTitle: scopeResult.title,
+      cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listScopeCards(context, scope, payload || {}),
+    };
+  }
+
   function fetchCards(context, payload) {
     const cardIds = payload && Array.isArray(payload.cardIds) ? payload.cardIds.map(String) : [];
     if (cardIds.length === 0) {
       throw new Error("缺少要拉取的卡片");
     }
 
-    const selected = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getSelectedCardsInfo(context);
-    const selectedIds = {};
-    selected.noteIds.forEach(function (noteId) {
-      selectedIds[String(noteId)] = true;
-    });
-
-    const missingIds = cardIds.filter(function (noteId) {
-      return !selectedIds[noteId];
-    });
-    if (missingIds.length > 0) {
-      throw new Error("只能拉取MN当前选中的卡片，请在MN里重新选择后刷新");
-    }
-
-    const cards = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCurrentCards(context).filter(function (card) {
-      return selectedIds[String(card.id)];
-    });
+    const selection = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getCardsByIds(cardIds);
+    const cards = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCardsByIds(context, cardIds);
     const format = payload && payload.format === "canvas" ? "canvas" : "markdown";
     if (format === "canvas") {
-      const canvas = previewSelectedCanvas(context, {});
+      const canvas = __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
       return {
         format,
         canvas: canvas.canvas,
@@ -77,12 +101,16 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     }
 
     const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
+    const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, prefs);
     return {
       format,
       cards,
-      ...previewSelectedMarkdown(context, prefs),
+      markdown: result.markdown,
+      noteCount: result.noteCount,
+      fileBaseName: result.fileBaseName,
+      warnings: result.warnings,
     };
   }
 
-  return { previewSelectedMarkdown, previewSelectedCanvas, fetchCards };
+  return { previewSelectedMarkdown, previewSelectedCanvas, previewScopeMarkdown, previewScopeCanvas, listScopeCards, fetchCards };
 })();

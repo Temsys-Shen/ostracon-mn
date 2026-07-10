@@ -1,5 +1,6 @@
 var __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon = (function () {
   const SYNCED_CARDS_KEY = "mn_ostracon_synced_cards";
+  const SYNCED_SCOPES_KEY = "mn_ostracon_synced_scopes";
 
   function getSyncedCards() {
     return __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadJsonObject(SYNCED_CARDS_KEY, { cards: {} });
@@ -8,6 +9,15 @@ var __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon = (function () {
   function setSyncedCards(context, payload) {
     if (!payload || typeof payload !== "object") throw new Error("参数错误");
     return __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.saveJsonObject(SYNCED_CARDS_KEY, payload);
+  }
+
+  function getSyncedScopes() {
+    return __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadJsonObject(SYNCED_SCOPES_KEY, { scopes: {} });
+  }
+
+  function setSyncedScopes(context, payload) {
+    if (!payload || typeof payload !== "object") throw new Error("参数错误");
+    return __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.saveJsonObject(SYNCED_SCOPES_KEY, payload);
   }
 
   function syncCard(context, payload) {
@@ -71,6 +81,7 @@ var __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon = (function () {
 
   function getNoteImageFlags(note) {
     var hasImage = false;
+    if (note && note.excerptPic && note.excerptPic.paint) hasImage = true;
     var comments = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.arrayFromNSArray(note.comments);
     comments.forEach(function (comment) {
       if (comment && comment.type === "PaintNote") hasImage = true;
@@ -78,5 +89,5 @@ var __MN_BRIDGE_COMMANDS_SYNC_MNOstraconAddon = (function () {
     return { hasImage: hasImage, hasHandwriting: hasImage };
   }
 
-  return { getSyncedCards, setSyncedCards, syncCard, renderCardsForSync, getNoteImageFlags };
+  return { getSyncedCards, setSyncedCards, getSyncedScopes, setSyncedScopes, syncCard, renderCardsForSync, getNoteImageFlags };
 })();

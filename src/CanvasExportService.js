@@ -3,12 +3,14 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var normalizeText = _utils.normalizeText;
   var imageDataURI = _utils.imageDataURI;
   var arrayFromNSArray = _utils.arrayFromNSArray;
+  var resolveNoteTitle = _utils.resolveNoteTitle;
+  var usesExcerptAsTitle = _utils.usesExcerptAsTitle;
   var MN_COLORS = _utils.MN_COLORS;
 
-  function nodeText(note, includeImages) {
+  function nodeText(note, includeImages, options) {
     var lines = [];
-    var title = normalizeText(note.noteTitle) || "Untitled Card";
-    var excerpt = normalizeText(note.excerptText);
+    var title = resolveNoteTitle(note, options || {});
+    var excerpt = usesExcerptAsTitle(note) ? "" : normalizeText(note.excerptText);
 
     lines.push("## " + title);
     lines.push("");
@@ -16,6 +18,11 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     if (excerpt) {
       lines.push("> " + excerpt);
       lines.push("");
+    }
+
+    if (includeImages && note.excerptPic && note.excerptPic.paint) {
+      var excerptUri = imageDataURI(note.excerptPic.paint);
+      if (excerptUri) { lines.push("![](" + excerptUri + ")"); lines.push(""); }
     }
 
     arrayFromNSArray(note.comments).forEach(function (comment) {
@@ -38,8 +45,8 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var includeImages = options.includeImages !== false;
     return {
       noteId: String(note.noteId || ""),
-      title: normalizeText(note.noteTitle) || "Untitled Card",
-      canvasText: nodeText(note, includeImages),
+      title: resolveNoteTitle(note, options),
+      canvasText: nodeText(note, includeImages, options),
     };
   }
 
@@ -266,8 +273,8 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
         x: 0,
         y: 0,
         width: LAYOUT_CONFIG.nodeWidth,
-        height: estimateHeight(nodeText(card.note, includeImages)),
-        text: nodeText(card.note, includeImages),
+        height: estimateHeight(nodeText(card.note, includeImages, options)),
+        text: nodeText(card.note, includeImages, options),
       };
       if (card.note.colorIndex >= 0) {
         node.color = MN_COLORS[card.note.colorIndex];
@@ -414,8 +421,8 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
             id: uuid, type: "text",
             x: summaryNode.x, y: cursorY,
             width: LAYOUT_CONFIG.nodeWidth,
-            height: estimateHeight(nodeText(childNote, includeImages)),
-            text: nodeText(childNote, includeImages),
+            height: estimateHeight(nodeText(childNote, includeImages, options)),
+            text: nodeText(childNote, includeImages, options),
           };
           if (childNote.colorIndex >= 0) {
             childNode.color = MN_COLORS[childNote.colorIndex];

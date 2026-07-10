@@ -45,7 +45,7 @@ function useConnection(setConnection, setUrlInput, setNotice) {
         }
       })
       .catch((e) => {
-        if (!cancelled) setNotice(`连接失败: ${normalizeError(e)}`);
+        if (!cancelled) console.log("[Ostracon] auto connect failed:", normalizeError(e));
       });
     const unsubscribe = ostraconWsClient.subscribe(({ event, snapshot }) => {
       setConnection(snapshot);
@@ -64,15 +64,14 @@ function useConnection(setConnection, setUrlInput, setNotice) {
     }
 
     setNotice("");
+    ostraconWsClient.clearLastError();
     try {
       await ostraconWsClient.updateSettings(parsed);
       await ostraconWsClient.connect();
       setNotice("");
     } catch (e) {
       const snap = ostraconWsClient.getSnapshot();
-      if (!snap.lastError) {
-        setNotice(`连接失败: ${normalizeError(e)}`);
-      }
+      setNotice(`连接失败: ${snap.lastError || normalizeError(e)}`);
     }
   }, [setNotice]);
 
