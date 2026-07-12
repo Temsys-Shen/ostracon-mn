@@ -6,6 +6,8 @@ import { formatWsUrl } from "./hooks/useConnection";
 import { usePreferences } from "./hooks/usePreferences";
 import { useSelectionPolling } from "./hooks/useSelectionPolling";
 import { useSync } from "./hooks/useSync";
+import VaultBrowser from "./components/VaultBrowser";
+import { Library, Send } from "lucide-react";
 
 function formatTime(iso) {
   if (!iso) return "";
@@ -46,14 +48,39 @@ function HistorySection({ history, vaultName }) {
 
 /* ── Sub-components ── */
 
-function TopBar({ connection, onStatusClick }) {
+function BottomDock({ connection, onStatusClick, workspace, setWorkspace }) {
   const address = connection.connected ? `${connection.settings.host}:${connection.settings.port}` : "";
   return (
-    <div className="top-bar">
-      <span className={`top-status${connection.connected ? " clickable" : ""}`} onClick={onStatusClick}>
+    <footer className="bottom-dock">
+      {connection.connected && <nav className="dock-navigation" aria-label="工作区"><button className={workspace === "send" ? "active" : ""} onClick={() => setWorkspace("send")} type="button"><Send size={15} />发送</button><button className={workspace === "browse" ? "active" : ""} onClick={() => setWorkspace("browse")} type="button"><Library size={15} />浏览</button></nav>}
+      <button className={`connection-chip${connection.connected ? " connected" : ""}`} disabled={!connection.connected} onClick={onStatusClick} title={connection.connected ? "断开连接" : "未连接"} type="button">
         <span className={`status-dot ${connection.connected ? "on" : "off"}`} />
         {connection.connected ? address : "未连接"}
-      </span>
+      </button>
+    </footer>
+  );
+}
+
+function DisconnectDialog({ open, onCancel, onConfirm }) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+  return (
+    <div className="dialog-backdrop" onClick={onCancel}>
+      <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="disconnect-dialog-title" onClick={event => event.stopPropagation()}>
+        <h2 id="disconnect-dialog-title">断开连接？</h2>
+        <div className="dialog-actions">
+          <button onClick={onCancel} type="button">取消</button>
+          <button className="danger" onClick={onConfirm} type="button">断开</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -111,10 +138,6 @@ function OptionsPanel({ format, setFormat, prefs, setPrefs }) {
           <span className="option-label">层级</span>
           <button className={`chip ${prefs.mode === "flat" ? "active" : ""}`} onClick={() => setPrefs("mode", "flat")} type="button">平铺</button>
           <button className={`chip ${prefs.mode === "tree" ? "active" : ""}`} onClick={() => setPrefs("mode", "tree")} type="button">树形</button>
-          <span className="chip-sep" />
-          <span className="option-label">摘录</span>
-          <button className={`chip ${prefs.excerptStyle === "quote" ? "active" : ""}`} onClick={() => setPrefs("excerptStyle", "quote")} type="button">引用</button>
-          <button className={`chip ${prefs.excerptStyle === "plain" ? "active" : ""}`} onClick={() => setPrefs("excerptStyle", "plain")} type="button">原文</button>
           <span className="chip-sep" />
           <span className="option-label">回链</span>
           <button className={`chip ${prefs.includeBacklinks ? "active" : ""}`} onClick={() => setPrefs("includeBacklinks", !prefs.includeBacklinks)} type="button">{prefs.includeBacklinks ? "开" : "关"}</button>
@@ -175,7 +198,7 @@ function SendArea({ loading, selectedCount, send, sendMode, setSendMode, sendSco
 /* ── App ── */
 
 export default function App() {
-  const [prefs, setPrefsState] = useState({ mode: "flat", excerptStyle: "quote", includeBacklinks: true });
+  const [prefs, setPrefsState] = useState({ mode: "flat", includeBacklinks: true });
   const [format, setFormat] = useState("markdown");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -184,6 +207,8 @@ export default function App() {
   const [sendMode, setSendMode] = useState("once");
   const [sendScope, setSendScope] = useState("selection");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [workspace, setWorkspace] = useState("send");
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
 
   const connection = useBridgeStore((s) => s.connection);
   const sendHistory = useBridgeStore((s) => s.sendHistory);
@@ -211,12 +236,16 @@ export default function App() {
   }, [sendScope, sendMode]);
 
   const isConnecting = connection.status === "connecting";
-  const handleTopStatusClick = useCallback(() => {
-    if (connection.connected) {
-      ostraconWsClient.disconnect();
-      setNotice("已断开");
-    }
+  const requestDisconnect = useCallback(() => {
+    if (connection.connected) setDisconnectDialogOpen(true);
   }, [connection.connected]);
+
+  const cancelDisconnect = useCallback(() => setDisconnectDialogOpen(false), []);
+  const confirmDisconnect = useCallback(() => {
+    ostraconWsClient.disconnect();
+    setDisconnectDialogOpen(false);
+    setNotice("已断开");
+  }, []);
 
   const handleUrlInputChange = useCallback((value) => {
     setUrlInput(value);
@@ -261,7 +290,6 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <TopBar connection={connection} onStatusClick={handleTopStatusClick} />
       {toast}
 
       {(!connection.connected || connection.status === "pending_approval") && (
@@ -279,7 +307,7 @@ export default function App() {
       )}
 
       {connection.connected && connection.status !== "pending_approval" && (
-        <>
+        workspace === "send" ? <>
           <SendArea
             loading={loading}
             selectedCount={selectedCount}
@@ -295,8 +323,10 @@ export default function App() {
           <OptionsPanel format={format} setFormat={setFormat} prefs={prefs} setPrefs={setPrefs} />
 
           <HistorySection history={sendHistory} vaultName={connection.vaultName} />
-        </>
+        </> : <VaultBrowser connection={connection} />
       )}
+      <BottomDock connection={connection} onStatusClick={requestDisconnect} workspace={workspace} setWorkspace={setWorkspace} />
+      <DisconnectDialog open={disconnectDialogOpen} onCancel={cancelDisconnect} onConfirm={confirmDisconnect} />
     </div>
   );
 }

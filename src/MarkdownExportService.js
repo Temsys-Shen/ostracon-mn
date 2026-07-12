@@ -14,17 +14,10 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     const src = options || {};
     return {
       mode: src.mode === "tree" ? "tree" : "flat",
-      excerptStyle: src.excerptStyle === "plain" ? "plain" : "quote",
       includeImages: src.includeImages !== false,
       includeNoteIds: Boolean(src.includeNoteIds),
       includeBacklinks: src.includeBacklinks !== false,
     };
-  }
-
-  function quoteMarkdownBlock(text) {
-    return normalizeText(text).split("\n").map(function (line) {
-      return line.length > 0 ? `> ${line}` : ">";
-    }).join("\n");
   }
 
   function createWarningBag() {
@@ -105,7 +98,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       return;
     }
 
-    lines.push(options.excerptStyle === "quote" ? quoteMarkdownBlock(excerptText) : excerptText);
+    lines.push(excerptText);
     lines.push("");
   }
 

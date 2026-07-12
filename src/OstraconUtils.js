@@ -51,7 +51,7 @@ var __MN_OSTRACON_UTILS_MNOstraconAddon = (function () {
     return "Untitled Card";
   }
 
-  var DEFAULT_MD_OPTIONS = { mode: "flat", excerptStyle: "quote", includeImages: true, includeBacklinks: true };
+  var DEFAULT_MD_OPTIONS = { mode: "flat", includeImages: true, includeBacklinks: true };
   var MN_COLORS = ["#FFFFAA", "#BEFFBE", "#ADD2FF", "#FFAABE", "#FFFF00", "#00FF00", "#00BEFF", "#FF0000", "#FF8000", "#008040", "#003EB3", "#CF1B11", "#FFFFFF", "#DADADA", "#B4B4B4", "#C39DE0"];
 
   return { normalizeText, imageDataURI, arrayFromNSArray, getValue, getNoteId, usesExcerptAsTitle, resolveNoteTitle, DEFAULT_MD_OPTIONS, MN_COLORS };

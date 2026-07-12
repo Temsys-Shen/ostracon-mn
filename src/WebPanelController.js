@@ -3,6 +3,18 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
   var _bd = __MN_BRIDGE_DISPATCHER_MNOstraconAddon;
 
   const TITLE_HEIGHT = 32;
+  const TITLE_HORIZONTAL_PADDING = 14;
+  const CLOSE_BUTTON_SIZE = 24;
+  const CLOSE_BUTTON_MARGIN = 4;
+  const RESIZE_HANDLE_SIZE = 32;
+  const WINDOW_CORNER_RADIUS = 14;
+  const NAVIGATION_TYPE_LINK_CLICKED = 0;
+
+  const WINDOW_BACKGROUND = UIColor.colorWithRedGreenBlueAlpha(247 / 255, 248 / 255, 250 / 255, 1);
+  const TITLE_COLOR = UIColor.colorWithRedGreenBlueAlpha(37 / 255, 42 / 255, 52 / 255, 1);
+  const SECONDARY_COLOR = UIColor.colorWithRedGreenBlueAlpha(105 / 255, 115 / 255, 134 / 255, 1);
+  const BORDER_COLOR = UIColor.colorWithRedGreenBlueAlpha(105 / 255, 115 / 255, 134 / 255, 0.16);
+  const CLOSE_BACKGROUND = UIColor.colorWithRedGreenBlueAlpha(238 / 255, 241 / 255, 245 / 255, 1);
 
   function resolveWebEntryURL(mainPath) {
     var devServerURL = __MNGetWebDevServerURL_MNOstraconAddon();
@@ -34,23 +46,24 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
 
   function refreshWebPanelLayout(controller) {
     var frame = controller.view.bounds;
+    controller.containerView.layer.cornerRadius = controller._isMaximized ? 0 : WINDOW_CORNER_RADIUS;
+    controller.containerView.layer.borderWidth = controller._isMaximized ? 0 : 1;
     controller.containerView.frame = { x: 0, y: 0, width: frame.width, height: frame.height };
     controller.titleBar.frame = { x: 0, y: 0, width: frame.width, height: TITLE_HEIGHT };
-    controller.titleLabel.frame = { x: 40, y: 0, width: Math.max(0, frame.width - 80), height: TITLE_HEIGHT };
+    controller.dragRegion.frame = { x: 0, y: 0, width: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2), height: TITLE_HEIGHT };
+    controller.titleLabel.frame = { x: TITLE_HORIZONTAL_PADDING, y: 0, width: Math.max(0, controller.dragRegion.frame.width - TITLE_HORIZONTAL_PADDING), height: TITLE_HEIGHT };
+    controller.closeButton.frame = { x: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN), y: CLOSE_BUTTON_MARGIN, width: CLOSE_BUTTON_SIZE, height: CLOSE_BUTTON_SIZE };
+    controller.titleDivider.frame = { x: 0, y: TITLE_HEIGHT - 1, width: frame.width, height: 1 };
     controller.webView.frame = { x: 0, y: TITLE_HEIGHT, width: frame.width, height: Math.max(0, frame.height - TITLE_HEIGHT) };
-    var resizeSize = 40;
-    controller.resizeHandle.frame = { x: frame.width - resizeSize, y: frame.height - resizeSize, width: resizeSize, height: resizeSize };
+    controller.resizeHandle.frame = { x: frame.width - RESIZE_HANDLE_SIZE, y: frame.height - RESIZE_HANDLE_SIZE, width: RESIZE_HANDLE_SIZE, height: RESIZE_HANDLE_SIZE };
+    controller.resizeHandle.hidden = controller._isMaximized;
   }
 
   function setupWebPanelUI(controller) {
     controller.navigationItem.title = "Ostracon";
     controller.view.autoresizingMask = 0;
     controller.view.backgroundColor = UIColor.clearColor();
-    controller.view.layer.shadowOffset = { width: 0, height: 2 };
-    controller.view.layer.shadowRadius = 4;
-    controller.view.layer.shadowOpacity = 0.3;
-    controller.view.layer.shadowColor = UIColor.blackColor();
-    controller.view.layer.masksToBounds = false;
+    controller.view.layer.masksToBounds = true;
 
     var initWidth = _fm.DEFAULT_WIDTH;
     var initHeight = _fm.DEFAULT_HEIGHT;
@@ -58,61 +71,85 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller._isMaximized = false;
 
     controller.containerView = new UIView({ x: 0, y: 0, width: initWidth, height: initHeight });
-    controller.containerView.backgroundColor = UIColor.whiteColor();
-    controller.containerView.layer.cornerRadius = 10;
+    controller.containerView.backgroundColor = WINDOW_BACKGROUND;
+    controller.containerView.layer.cornerRadius = WINDOW_CORNER_RADIUS;
     controller.containerView.layer.masksToBounds = true;
-    controller.containerView.layer.borderWidth = 0.5;
-    controller.containerView.layer.borderColor = UIColor.lightGrayColor().colorWithAlphaComponent(0.3);
+    controller.containerView.layer.borderWidth = 1;
+    controller.containerView.layer.borderColor = BORDER_COLOR;
     controller.containerView.autoresizingMask = (1 << 1 | 1 << 4);
     controller.view.addSubview(controller.containerView);
 
     controller.titleBar = new UIView({ x: 0, y: 0, width: initWidth, height: TITLE_HEIGHT });
-    controller.titleBar.backgroundColor = UIColor.colorWithWhiteAlpha(0.96, 1);
+    controller.titleBar.backgroundColor = WINDOW_BACKGROUND;
     controller.titleBar.autoresizingMask = (1 << 1);
 
-    controller.titleLabel = new UILabel({ x: 40, y: 0, width: initWidth - 80, height: TITLE_HEIGHT });
-    controller.titleLabel.text = "Ostracon";
-    controller.titleLabel.textAlignment = 1;
-    controller.titleLabel.font = UIFont.boldSystemFontOfSize(14);
-    controller.titleLabel.textColor = UIColor.darkGrayColor();
-    controller.titleLabel.autoresizingMask = (1 << 1);
-    controller.titleBar.addSubview(controller.titleLabel);
+    controller.dragRegion = new UIView({ x: 0, y: 0, width: initWidth - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2, height: TITLE_HEIGHT });
+    controller.dragRegion.backgroundColor = UIColor.clearColor();
+    controller.dragRegion.autoresizingMask = (1 << 1);
 
-    controller.closeButton = new UIButton({ x: 5, y: 0, width: TITLE_HEIGHT, height: TITLE_HEIGHT });
+    controller.titleLabel = new UILabel({ x: TITLE_HORIZONTAL_PADDING, y: 0, width: initWidth - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2 - TITLE_HORIZONTAL_PADDING, height: TITLE_HEIGHT });
+    controller.titleLabel.text = "Ostracon";
+    controller.titleLabel.textAlignment = 0;
+    controller.titleLabel.font = UIFont.boldSystemFontOfSize(12);
+    controller.titleLabel.textColor = TITLE_COLOR;
+    controller.titleLabel.autoresizingMask = (1 << 1);
+    controller.dragRegion.addSubview(controller.titleLabel);
+    controller.titleBar.addSubview(controller.dragRegion);
+
+    controller.closeButton = new UIButton({ x: initWidth - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN, y: CLOSE_BUTTON_MARGIN, width: CLOSE_BUTTON_SIZE, height: CLOSE_BUTTON_SIZE });
     controller.closeButton.setTitleForState("\u00d7", 0);
-    controller.closeButton.setTitleColorForState(UIColor.grayColor(), 0);
-    controller.closeButton.titleLabel.font = UIFont.systemFontOfSize(24);
+    controller.closeButton.setTitleColorForState(SECONDARY_COLOR, 0);
+    controller.closeButton.titleLabel.font = UIFont.systemFontOfSize(18);
+    controller.closeButton.backgroundColor = CLOSE_BACKGROUND;
+    controller.closeButton.layer.cornerRadius = 6;
+    controller.closeButton.layer.masksToBounds = true;
     controller.closeButton.addTargetActionForControlEvents(controller, "closeWindow", 1 << 0);
     controller.titleBar.addSubview(controller.closeButton);
 
+    controller.titleDivider = new UIView({ x: 0, y: TITLE_HEIGHT - 1, width: initWidth, height: 1 });
+    controller.titleDivider.backgroundColor = BORDER_COLOR;
+    controller.titleDivider.autoresizingMask = (1 << 1);
+    controller.titleBar.addSubview(controller.titleDivider);
+
     var panRecognizer = new UIPanGestureRecognizer(controller, "handlePan:");
-    controller.titleBar.addGestureRecognizer(panRecognizer);
+    controller.dragRegion.addGestureRecognizer(panRecognizer);
 
     var doubleTapRecognizer = new UITapGestureRecognizer(controller, "handleTitleBarDoubleTap:");
     doubleTapRecognizer.numberOfTapsRequired = 2;
-    controller.titleBar.addGestureRecognizer(doubleTapRecognizer);
+    controller.dragRegion.addGestureRecognizer(doubleTapRecognizer);
     panRecognizer.requireGestureRecognizerToFail(doubleTapRecognizer);
     controller.containerView.addSubview(controller.titleBar);
 
     controller.webView = new UIWebView({ x: 0, y: TITLE_HEIGHT, width: initWidth, height: Math.max(0, initHeight - TITLE_HEIGHT) });
-    controller.webView.backgroundColor = UIColor.whiteColor();
+    controller.webView.backgroundColor = WINDOW_BACKGROUND;
     controller.webView.scalesPageToFit = true;
     controller.webView.autoresizingMask = (1 << 1 | 1 << 4);
     controller.webView.delegate = controller;
+    controller.webView.scrollView.bounces = false;
+    controller.webView.scrollView.alwaysBounceVertical = false;
+    controller.webView.scrollView.alwaysBounceHorizontal = false;
+    controller.webView.scrollView.showsVerticalScrollIndicator = false;
+    controller.webView.scrollView.showsHorizontalScrollIndicator = false;
     controller.containerView.addSubview(controller.webView);
 
-    var resizeSize = 40;
-    controller.resizeHandle = new UIView({ x: initWidth - resizeSize, y: initHeight - resizeSize, width: resizeSize, height: resizeSize });
+    controller.resizeHandle = new UIView({ x: initWidth - RESIZE_HANDLE_SIZE, y: initHeight - RESIZE_HANDLE_SIZE, width: RESIZE_HANDLE_SIZE, height: RESIZE_HANDLE_SIZE });
     controller.resizeHandle.backgroundColor = UIColor.clearColor();
     controller.resizeHandle.autoresizingMask = (1 << 0 | 1 << 3);
     controller.resizeHandle.userInteractionEnabled = true;
 
-    var resizeIcon = new UILabel({ x: 15, y: 15, width: 20, height: 20 });
-    resizeIcon.text = "\u2198";
-    resizeIcon.font = UIFont.systemFontOfSize(16);
-    resizeIcon.textColor = UIColor.grayColor();
-    resizeIcon.alpha = 0.5;
-    controller.resizeHandle.addSubview(resizeIcon);
+    var resizeArcClip = new UIView({ x: 13, y: 13, width: 16, height: 16 });
+    resizeArcClip.backgroundColor = UIColor.clearColor();
+    resizeArcClip.layer.masksToBounds = true;
+    resizeArcClip.userInteractionEnabled = false;
+
+    var resizeArc = new UIView({ x: -13, y: -13, width: WINDOW_CORNER_RADIUS * 2, height: WINDOW_CORNER_RADIUS * 2 });
+    resizeArc.backgroundColor = UIColor.clearColor();
+    resizeArc.layer.cornerRadius = WINDOW_CORNER_RADIUS;
+    resizeArc.layer.borderWidth = 2;
+    resizeArc.layer.borderColor = SECONDARY_COLOR;
+    resizeArc.userInteractionEnabled = false;
+    resizeArcClip.addSubview(resizeArc);
+    controller.resizeHandle.addSubview(resizeArcClip);
 
     var resizeRecognizer = new UIPanGestureRecognizer(controller, "handleResize:");
     controller.resizeHandle.addGestureRecognizer(resizeRecognizer);
@@ -120,9 +157,8 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     var resizeDoubleTap = new UITapGestureRecognizer(controller, "handleResizeDoubleTap:");
     resizeDoubleTap.numberOfTapsRequired = 2;
     controller.resizeHandle.addGestureRecognizer(resizeDoubleTap);
-    resizeRecognizer.requireGestureRecognizerToFail(resizeDoubleTap);
 
-    controller.containerView.addSubview(controller.resizeHandle);
+    controller.view.addSubview(controller.resizeHandle);
   }
 
   function togglePanelMaximize(controller) {
@@ -265,7 +301,14 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
       var message = null;
       try {
         var url = request.URL();
-        if (String(url.scheme || "").toLowerCase() !== _bd.BRIDGE_SCHEME) return true;
+        var scheme = String(url.scheme || "").toLowerCase();
+        if (scheme !== _bd.BRIDGE_SCHEME) {
+          if (navigationType === NAVIGATION_TYPE_LINK_CLICKED) {
+            Application.sharedInstance().openURL(url);
+            return false;
+          }
+          return true;
+        }
 
         message = _bd.decodeBridgeMessage(url);
         var result = _bd.dispatchBridgeCommand(self, message);

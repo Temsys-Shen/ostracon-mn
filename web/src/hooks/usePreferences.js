@@ -18,7 +18,6 @@ function usePreferences(setPrefsState, setSyncedCards, setSyncedScopes, setNotic
       if (mdPrefs) {
         setPrefsState({
           mode: mdPrefs.mode || "flat",
-          excerptStyle: mdPrefs.excerptStyle || "quote",
           includeBacklinks: mdPrefs.includeBacklinks !== false,
         });
       }

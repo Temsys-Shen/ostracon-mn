@@ -52,6 +52,11 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     previewScopeCanvas: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.previewScopeCanvas,
     listScopeCards: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.listScopeCards,
     fetchCards: __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.fetchCards,
+    getObsidianInsertContext: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.getInsertContext,
+    createObsidianImportSession: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.createSession,
+    appendObsidianImportChunk: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.appendChunk,
+    finalizeObsidianImport: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.finalize,
+    abortObsidianImport: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.abort,
   };
 
   return { commands };

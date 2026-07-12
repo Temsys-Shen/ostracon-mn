@@ -49,6 +49,9 @@ function useConnection(setConnection, setUrlInput, setNotice) {
       });
     const unsubscribe = ostraconWsClient.subscribe(({ event, snapshot }) => {
       setConnection(snapshot);
+      if (!snapshot.connected && snapshot.lastError) {
+        setNotice(`连接失败: ${snapshot.lastError}`);
+      }
     });
     return () => {
       cancelled = true;

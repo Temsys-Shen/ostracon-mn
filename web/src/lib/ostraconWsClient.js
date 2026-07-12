@@ -3,6 +3,10 @@ import { createPacketDraft, normalizePacket } from "./ostraconContract";
 import { createId, nowIso } from "./idUtils";
 
 const DEFAULT_PORT = 27123;
+const PROTOCOL_VERSION = 2;
+const PLUGIN_ID = "ostracon-mn";
+const EXPECTED_SERVER_PLUGIN_ID = "ostracon-ob";
+const VERSION_MISMATCH_ERROR = "插件版本不一致，请同时更新MarginNote端和Obsidian端";
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 30000;
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1000;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
@@ -34,9 +38,8 @@ function createDefaultSettings() {
   return normalizeSettings();
 }
 
-function buildConnectionUrl(settings, sessionId, clientId) {
+function buildConnectionUrl(settings, clientId) {
   const safeSettings = normalizeSettings(settings);
-  const session = encodeURIComponent(sessionId || "");
   const cid = encodeURIComponent(clientId || "");
   // "::" is a bind address (all interfaces), not a connect address. Use IPv6 loopback instead.
   let host = safeSettings.host;
@@ -44,15 +47,14 @@ function buildConnectionUrl(settings, sessionId, clientId) {
   // Strip existing brackets to avoid double-bracketing
   const clean = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   const hostPart = clean.includes(":") ? `[${clean}]` : clean;
-  return `ws://${hostPart}:${safeSettings.port}?session=${session}&clientId=${cid}`;
+  return `ws://${hostPart}:${safeSettings.port}?clientId=${cid}`;
 }
 
-function buildClientHelloPayload(settings, sessionId, clientId) {
+function buildClientHelloPayload(settings, clientId) {
   return {
-    protocolVersion: 1,
-    pluginId: "ostracon-mn",
+    protocolVersion: PROTOCOL_VERSION,
+    pluginId: PLUGIN_ID,
     clientId,
-    sessionId,
     clientPlatform: "MarginNote",
     transport: "ws",
     capabilities: [
@@ -138,7 +140,6 @@ class OstraconWsClient {
     this.settingsReady = false;
     // Use a temporary clientId; the real one will be loaded from NSUserDefaults in loadStoredSettings()
     this.clientId = createId("mn-client");
-    this.sessionId = createId("mn-session");
     this.socket = null;
     this.shouldReconnect = false;
     this.manualDisconnect = false;
@@ -156,7 +157,6 @@ class OstraconWsClient {
       connected: false,
       ready: false,
       clientId: this.clientId,
-      sessionId: this.sessionId,
       connectionUrl: "",
       settings: this.settings,
       reconnectCount: 0,
@@ -165,9 +165,9 @@ class OstraconWsClient {
       lastAck: null,
       lastPong: null,
       lastSyncResult: null,
+      lastEvent: null,
       lastError: "",
       lastClose: null,
-      serverSessionId: "",
       vaultName: "",
     };
   }
@@ -320,7 +320,7 @@ class OstraconWsClient {
   }
 
   buildConnectionUrl() {
-    return buildConnectionUrl(this.settings, this.sessionId, this.clientId);
+    return buildConnectionUrl(this.settings, this.clientId);
   }
 
   validateSettings() {
@@ -543,7 +543,7 @@ class OstraconWsClient {
       return;
     }
 
-    if (event.code === 4001 || event.code === 4003 || event.code === 1008) {
+    if (event.code === 4001 || event.code === 4002 || event.code === 4003 || event.code === 1008) {
       this.shouldReconnect = false;
       this.setState({
         ...WS_STATE_BY.error,
@@ -593,7 +593,6 @@ class OstraconWsClient {
       type: "sync_result",
       requestId: requestId || "",
       clientId: this.clientId,
-      sessionId: this.sessionId,
       payload,
     });
   }
@@ -603,7 +602,6 @@ class OstraconWsClient {
       type: "error",
       requestId: requestId || "",
       clientId: this.clientId,
-      sessionId: this.sessionId,
       payload: {
         command,
         message: error && error.message ? error.message : String(error),
@@ -669,9 +667,26 @@ class OstraconWsClient {
 
     switch (message.type) {
       case "hello":
+        if (!message.payload
+          || message.payload.protocolVersion !== PROTOCOL_VERSION
+          || message.payload.pluginId !== EXPECTED_SERVER_PLUGIN_ID) {
+          this.setState({
+            ...WS_STATE_BY.error,
+            connected: false,
+            ready: false,
+            lastError: VERSION_MISMATCH_ERROR,
+          });
+          this.log("error", VERSION_MISMATCH_ERROR, {
+            protocolVersion: message.payload && message.payload.protocolVersion,
+            pluginId: message.payload && message.payload.pluginId,
+          });
+          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.close(4002, VERSION_MISMATCH_ERROR);
+          }
+          break;
+        }
         this.setState({
           ...WS_STATE_BY.ready,
-          serverSessionId: message.payload && message.payload.sessionId ? message.payload.sessionId : "",
           vaultName: message.payload && message.payload.vaultName ? message.payload.vaultName : "",
           lastHello: {
             at: nowIso(),
@@ -679,9 +694,7 @@ class OstraconWsClient {
           },
           lastError: "",
         });
-        this.log("info", "收到OB hello", {
-          sessionId: message.payload && message.payload.sessionId ? message.payload.sessionId : "",
-        });
+        this.log("info", "收到OB hello");
         break;
       case "pending_approval":
         this.setState({
@@ -692,10 +705,12 @@ class OstraconWsClient {
         break;
       case "approved":
         this.setState({
-          ...WS_STATE_BY.ready,
+          ...WS_STATE_BY.open,
+          ready: false,
           lastError: "",
         });
         this.log("info", "OB端已批准连接");
+        this.sendHello();
         break;
       case "ack":
         this.setState({
@@ -733,6 +748,9 @@ class OstraconWsClient {
         this.log("info", "收到sync_result", {
           requestId: message.requestId || "",
         });
+        break;
+      case "event":
+        this.setState({ lastEvent: { at: nowIso(), event: message.event || "", payload: message.payload || null } });
         break;
       case "error":
         this.log("error", "收到OB错误", message.payload || null);
@@ -833,7 +851,7 @@ class OstraconWsClient {
     return this.sendRaw({
       type: "hello",
       requestId: createRequestId("hello"),
-      payload: buildClientHelloPayload(this.settings, this.sessionId, this.clientId),
+      payload: buildClientHelloPayload(this.settings, this.clientId),
     });
   }
 
@@ -843,7 +861,6 @@ class OstraconWsClient {
         type: "ping",
         payload: {
           clientTime: nowIso(),
-          sessionId: this.sessionId,
           ...payload,
         },
       },
@@ -878,7 +895,6 @@ class OstraconWsClient {
         type: "command",
         command: "submitPacket",
         clientId: this.clientId,
-        sessionId: this.sessionId,
         payload,
       },
       {
@@ -887,13 +903,19 @@ class OstraconWsClient {
     );
   }
 
+  sendObsidianCommand(command, payload = {}, timeoutMs = 30000) {
+    return this.request(
+      { type: "command", command, clientId: this.clientId, payload },
+      { resolveOn: ["sync_result"], timeoutMs },
+    ).then(message => message.payload);
+  }
+
   sendCardUpdated(payload) {
     return this.request(
       {
         type: "command",
         command: "cardUpdated",
         clientId: this.clientId,
-        sessionId: this.sessionId,
         payload,
       },
       {

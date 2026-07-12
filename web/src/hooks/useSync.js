@@ -21,7 +21,6 @@ function createSyncRenderOptions(format, prefs = {}) {
   if (format === "canvas") return { includeImages: true };
   return {
     mode: prefs.mode === "tree" ? "tree" : "flat",
-    excerptStyle: prefs.excerptStyle === "plain" ? "plain" : "quote",
     includeImages: prefs.includeImages !== false,
     includeNoteIds: true,
   };

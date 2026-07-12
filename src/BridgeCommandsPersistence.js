@@ -10,7 +10,6 @@ var __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon = (function () {
     if (stored && typeof stored === "object") {
       return {
         mode: stored.mode === "tree" ? "tree" : "flat",
-        excerptStyle: stored.excerptStyle === "plain" ? "plain" : "quote",
         includeImages: stored.includeImages !== false,
         includeBacklinks: stored.includeBacklinks !== false,
       };
