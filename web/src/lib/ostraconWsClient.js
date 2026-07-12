@@ -3,7 +3,7 @@ import { createPacketDraft, normalizePacket } from "./ostraconContract";
 import { createId, nowIso } from "./idUtils";
 
 const DEFAULT_PORT = 27123;
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 4;
 const PLUGIN_ID = "ostracon-mn";
 const EXPECTED_SERVER_PLUGIN_ID = "ostracon-ob";
 const VERSION_MISMATCH_ERROR = "插件版本不一致，请同时更新MarginNote端和Obsidian端";
@@ -63,8 +63,7 @@ function buildClientHelloPayload(settings, clientId) {
       "pong",
       "event",
       "command",
-      "sync_request",
-      "sync_result",
+      "command_result",
       "ack",
       "error",
     ],
@@ -127,8 +126,12 @@ const SERVER_COMMAND_HANDLERS = {
     }));
     self.sendResult(requestId, { ok: true, packet, noteCount: result.noteCount || packet.objects.length });
   },
-  async syncCard(self, requestId, payload) {
-    const result = await MNBridge.send("syncCard", payload);
+  async getQuoteSelection(self, requestId, payload) {
+    const result = await MNBridge.send(
+      "getQuoteSelection",
+      { createCard: payload && payload.createCard === true },
+      30000,
+    );
     self.sendResult(requestId, result);
   },
 };
@@ -164,7 +167,7 @@ class OstraconWsClient {
       lastHello: null,
       lastAck: null,
       lastPong: null,
-      lastSyncResult: null,
+      lastCommandResult: null,
       lastEvent: null,
       lastError: "",
       lastClose: null,
@@ -590,7 +593,7 @@ class OstraconWsClient {
 
   sendResult(requestId, payload) {
     this.sendRaw({
-      type: "sync_result",
+      type: "command_result",
       requestId: requestId || "",
       clientId: this.clientId,
       payload,
@@ -737,15 +740,15 @@ class OstraconWsClient {
           requestId: message.requestId || "",
         });
         break;
-      case "sync_result":
+      case "command_result":
         this.setState({
-          lastSyncResult: {
+          lastCommandResult: {
             at: nowIso(),
             requestId: message.requestId || "",
             payload: message.payload || null,
           },
         });
-        this.log("info", "收到sync_result", {
+        this.log("info", "收到command_result", {
           requestId: message.requestId || "",
         });
         break;
@@ -870,35 +873,17 @@ class OstraconWsClient {
     );
   }
 
-  syncRequest(payload = {}) {
-    return this.request(
-      {
-        type: "sync_request",
-        payload: {
-          scope: "packets",
-          ...payload,
-        },
-      },
-      {
-        resolveOn: ["sync_result"],
-      },
-    );
-  }
-
-  sendPacket(packet, autoSync = false, targetFilePath = "") {
+  sendPacket(packet) {
     const normalized = normalizePacket(packet);
-    const payload = autoSync
-      ? { packet: normalized, autoSynced: true, targetFilePath: targetFilePath || "" }
-      : normalized;
     return this.request(
       {
         type: "command",
         command: "submitPacket",
         clientId: this.clientId,
-        payload,
+        payload: normalized,
       },
       {
-        resolveOn: ["sync_result"],
+        resolveOn: ["command_result"],
       },
     );
   }
@@ -906,28 +891,17 @@ class OstraconWsClient {
   sendObsidianCommand(command, payload = {}, timeoutMs = 30000) {
     return this.request(
       { type: "command", command, clientId: this.clientId, payload },
-      { resolveOn: ["sync_result"], timeoutMs },
+      { resolveOn: ["command_result"], timeoutMs },
     ).then(message => message.payload);
-  }
-
-  sendCardUpdated(payload) {
-    return this.request(
-      {
-        type: "command",
-        command: "cardUpdated",
-        clientId: this.clientId,
-        payload,
-      },
-      {
-        resolveOn: ["sync_result"],
-      },
-    );
   }
 }
 
 const ostraconWsClient = new OstraconWsClient();
 
 export {
+  OstraconWsClient,
+  PROTOCOL_VERSION,
+  buildClientHelloPayload,
   createDefaultSettings,
   createRequestId,
   normalizeSettings,

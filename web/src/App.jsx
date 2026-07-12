@@ -1,13 +1,15 @@
-import { useMemo, useCallback, useState, useRef, useEffect } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import ostraconWsClient from "./lib/ostraconWsClient";
 import useBridgeStore from "./store/useBridgeStore";
 import { useConnection, useDiscovery, parseConnectionUrl } from "./hooks/useConnection";
 import { formatWsUrl } from "./hooks/useConnection";
 import { usePreferences } from "./hooks/usePreferences";
 import { useSelectionPolling } from "./hooks/useSelectionPolling";
-import { useSync } from "./hooks/useSync";
+import { useSend } from "./hooks/useSend";
+import { isSendDisabled } from "./lib/sendRules";
 import VaultBrowser from "./components/VaultBrowser";
-import { Library, Send } from "lucide-react";
+import QuotePanel from "./components/QuotePanel";
+import { Library, Quote, Send } from "lucide-react";
 
 function formatTime(iso) {
   if (!iso) return "";
@@ -33,7 +35,6 @@ function HistorySection({ history, vaultName }) {
       <div className="history-label">最近</div>
       {history.slice(0, 3).map((entry, i) => (
         <div className={`history-item ${entry.ok ? "ok" : "fail"}`} key={`${entry.at}-${i}`}>
-          {entry.synced && <span className="history-sync-icon">🔄</span>}
           <span className="history-icon">{entry.ok ? "✓" : "✗"}</span>
           <span className="history-body">{entry.summary}</span>
           {entry.ok && entry.filePath && vaultName && (
@@ -52,7 +53,7 @@ function BottomDock({ connection, onStatusClick, workspace, setWorkspace }) {
   const address = connection.connected ? `${connection.settings.host}:${connection.settings.port}` : "";
   return (
     <footer className="bottom-dock">
-      {connection.connected && <nav className="dock-navigation" aria-label="工作区"><button className={workspace === "send" ? "active" : ""} onClick={() => setWorkspace("send")} type="button"><Send size={15} />发送</button><button className={workspace === "browse" ? "active" : ""} onClick={() => setWorkspace("browse")} type="button"><Library size={15} />浏览</button></nav>}
+      {connection.connected && <nav className="dock-navigation" aria-label="工作区"><button className={workspace === "send" ? "active" : ""} onClick={() => setWorkspace("send")} type="button"><Send size={15} />发送</button><button className={workspace === "browse" ? "active" : ""} onClick={() => setWorkspace("browse")} type="button"><Library size={15} />浏览</button><button className={workspace === "quote" ? "active" : ""} onClick={() => setWorkspace("quote")} type="button"><Quote size={15} />引文</button></nav>}
       <button className={`connection-chip${connection.connected ? " connected" : ""}`} disabled={!connection.connected} onClick={onStatusClick} title={connection.connected ? "断开连接" : "未连接"} type="button">
         <span className={`status-dot ${connection.connected ? "on" : "off"}`} />
         {connection.connected ? address : "未连接"}
@@ -119,8 +120,6 @@ function ConnectionPanel({ urlInput, onUrlInputChange, isConnecting, onConnect, 
       {connection.status === "pending_approval" && (
         <div className="approval-waiting">等待 OB 端确认连接...</div>
       )}
-
-      <p className="disconnect-hint">在OB的Ostracon设置页复制连接串，或点击扫描自动发现</p>
     </div>
   );
 }
@@ -151,21 +150,8 @@ function scopeSelectionLabel(selectedCount) {
   return selectedCount > 0 ? `选中${selectedCount}张` : "未选中卡片";
 }
 
-function SendArea({ loading, selectedCount, send, sendMode, setSendMode, sendScope, setSendScope, dropdownOpen, setDropdownOpen }) {
-  const groupRef = useRef(null);
-  const canSync = sendScope !== "mindmap";
-  const sendDisabled = loading || (sendScope === "selection" && selectedCount === 0);
-  const singleAction = !canSync;
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const handler = (e) => {
-      if (groupRef.current && !groupRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [dropdownOpen, setDropdownOpen]);
+function SendArea({ loading, selectedCount, send, sendScope, setSendScope }) {
+  const sendDisabled = isSendDisabled(loading, sendScope, selectedCount);
 
   return (
     <div className="send-area">
@@ -175,21 +161,10 @@ function SendArea({ loading, selectedCount, send, sendMode, setSendMode, sendSco
         <button className={`chip ${sendScope === "selection" ? "active" : ""}`} onClick={() => setSendScope("selection")} type="button">{scopeSelectionLabel(selectedCount)}</button>
       </div>
 
-      <div className={`send-btn-group ${singleAction ? "single-action" : ""}`} ref={groupRef}>
-        <button className="send-btn" disabled={sendDisabled} onClick={() => send({ autoSync: canSync && sendMode === "sync", scope: sendScope })} type="button">
-          {loading ? "处理中..." : canSync && sendMode === "sync" ? "📤 同步到Obsidian" : "📤 发送到Obsidian"}
+      <div className="send-btn-group single-action">
+        <button className="send-btn" disabled={sendDisabled} onClick={() => send({ scope: sendScope })} type="button">
+          {loading ? "处理中..." : "📤 发送到Obsidian"}
         </button>
-        {!singleAction && <button className="send-btn-arrow" onClick={() => setDropdownOpen(!dropdownOpen)} type="button">▾</button>}
-        {!singleAction && dropdownOpen && (
-          <div className="send-dropdown">
-            <button className="send-dropdown-item" onClick={() => { setDropdownOpen(false); setSendMode("once"); }} type="button">
-              {sendMode === "once" && "✓ "}发送一次
-            </button>
-            <button className="send-dropdown-item" onClick={() => { setDropdownOpen(false); setSendMode("sync"); }} type="button">
-              {sendMode === "sync" && "✓ "}同步并自动更新
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -204,36 +179,23 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [selectedCount, setSelectedCount] = useState(0);
   const [urlInput, setUrlInput] = useState("");
-  const [sendMode, setSendMode] = useState("once");
   const [sendScope, setSendScope] = useState("selection");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [workspace, setWorkspace] = useState("send");
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
 
   const connection = useBridgeStore((s) => s.connection);
   const sendHistory = useBridgeStore((s) => s.sendHistory);
-  const syncedCards = useBridgeStore((s) => s.syncedCards);
-  const syncedScopes = useBridgeStore((s) => s.syncedScopes);
   const addSendHistory = useBridgeStore((s) => s.addSendHistory);
   const setConnection = useBridgeStore((s) => s.setConnection);
-  const setSyncedCards = useBridgeStore((s) => s.setSyncedCards);
-  const setSyncedScopes = useBridgeStore((s) => s.setSyncedScopes);
 
   const { doConnect } = useConnection(setConnection, setUrlInput, setNotice);
   const { discoveredServers, scanning, startScan } = useDiscovery();
-  const { setPrefs } = usePreferences(setPrefsState, setSyncedCards, setSyncedScopes, setNotice);
+  const { setPrefs } = usePreferences(setPrefsState, setNotice);
   useSelectionPolling(connection.connected, setSelectedCount);
 
-  const { send } = useSync({
-    connection, prefs, format, syncedCards, syncedScopes,
-    setSyncedCards, setSyncedScopes, addSendHistory, setNotice, setLoading,
+  const { send } = useSend({
+    connection, prefs, format, addSendHistory, setNotice, setLoading,
   });
-
-  useEffect(() => {
-    if (sendScope === "mindmap" && sendMode === "sync") {
-      setSendMode("once");
-    }
-  }, [sendScope, sendMode]);
 
   const isConnecting = connection.status === "connecting";
   const requestDisconnect = useCallback(() => {
@@ -284,6 +246,12 @@ export default function App() {
     [setNotice, setUrlInput],
   );
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 2500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   const toast = useMemo(() => {
     return notice ? <div className="status-toast">{notice}</div> : null;
   }, [notice]);
@@ -312,18 +280,16 @@ export default function App() {
             loading={loading}
             selectedCount={selectedCount}
             send={send}
-            sendMode={sendMode}
-            setSendMode={setSendMode}
             sendScope={sendScope}
             setSendScope={setSendScope}
-            dropdownOpen={dropdownOpen}
-            setDropdownOpen={setDropdownOpen}
           />
 
           <OptionsPanel format={format} setFormat={setFormat} prefs={prefs} setPrefs={setPrefs} />
 
           <HistorySection history={sendHistory} vaultName={connection.vaultName} />
-        </> : <VaultBrowser connection={connection} />
+        </> : workspace === "browse"
+          ? <VaultBrowser connection={connection} />
+          : <QuotePanel active={workspace === "quote"} setNotice={setNotice} />
       )}
       <BottomDock connection={connection} onStatusClick={requestDisconnect} workspace={workspace} setWorkspace={setWorkspace} />
       <DisconnectDialog open={disconnectDialogOpen} onCancel={cancelDisconnect} onConfirm={confirmDisconnect} />

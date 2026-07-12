@@ -6,14 +6,10 @@ function normalizeError(e) {
   return typeof e === "string" ? e : e.message || JSON.stringify(e);
 }
 
-function usePreferences(setPrefsState, setSyncedCards, setSyncedScopes, setNotice) {
+function usePreferences(setPrefsState, setNotice) {
   useEffect(() => {
     let alive = true;
-    Promise.all([
-      MNBridge.send("getMarkdownPreferences"),
-      MNBridge.send("getSyncedCards"),
-      MNBridge.send("getSyncedScopes"),
-    ]).then(([mdPrefs, synced, syncedScopes]) => {
+    MNBridge.send("getMarkdownPreferences").then((mdPrefs) => {
       if (!alive) return;
       if (mdPrefs) {
         setPrefsState({
@@ -21,11 +17,9 @@ function usePreferences(setPrefsState, setSyncedCards, setSyncedScopes, setNotic
           includeBacklinks: mdPrefs.includeBacklinks !== false,
         });
       }
-      setSyncedCards(synced?.cards || {});
-      setSyncedScopes(syncedScopes?.scopes || {});
     }).catch((e) => setNotice(`偏好读取失败: ${normalizeError(e)}`));
     return () => { alive = false; };
-  }, [setPrefsState, setSyncedCards, setSyncedScopes, setNotice]);
+  }, [setPrefsState, setNotice]);
 
   const setPrefs = useCallback((k, v) => {
     setPrefsState((prev) => {

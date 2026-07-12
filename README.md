@@ -1,6 +1,14 @@
-# Web插件开发模板
+# Ostracon MN
 
-用于MarginNote4的Web插件工程模板。模板内置React+Vite前端与WebView面板桥接。
+MarginNote侧插件，用于向Obsidian单次发送卡片内容，并浏览Obsidian文档后创建或追加MN卡片。
+
+## 功能
+
+- 将选中卡片、当前脑图或当前学习集发送到Obsidian
+- 支持Markdown和Canvas格式
+- 浏览Obsidian Vault并把文档创建为MN卡片
+- 将Obsidian文档追加到当前MN卡片
+- 不监听卡片变更，不自动更新已经发送的文件
 
 ## 开始开发
 
@@ -44,7 +52,7 @@ pnpm version:major
 
 如果当前目录是干净的git工作区，会自动创建commit并打tag，例如 `v0.2.0`。
 
-## 桥接协议
+## WebView桥接
 
 Web页面与插件层按以下结构通信：
 
@@ -53,7 +61,7 @@ Web页面与插件层按以下结构通信：
 - `payload`：命令参数
 - `error`：错误对象
 
-模板示例使用URL拦截桥接：
+插件使用URL拦截桥接：
 
 - Web调用 `MNBridge.send(command,payload)`
 - 插件侧在 `webView:shouldStartLoadWithRequest:navigationType:`中解析 `mnaddon://bridge?...`

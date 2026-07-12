@@ -113,7 +113,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  function indexSelectedNodes(items) {
+  function indexSelectedNodes(items, allowEmpty) {
     const selectedById = {};
     const orderedNodes = [];
 
@@ -128,7 +128,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     });
 
     orderedNodes.sort(compareByVisualOrder);
-    if (orderedNodes.length === 0) {
+    if (orderedNodes.length === 0 && allowEmpty !== true) {
       throw new Error("未选中卡片");
     }
 
@@ -246,9 +246,9 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  function getSelectedCards(context) {
+  function getSelectedCardsInternal(context, allowEmpty) {
     const items = arrayFromNSArray(getSelectedViews(context));
-    const indexed = indexSelectedNodes(items);
+    const indexed = indexSelectedNodes(items, allowEmpty);
     const roots = getTreeRoots(indexed.orderedNodes, indexed.selectedById);
     const flatCards = indexed.orderedNodes.map(function (node) {
       return {
@@ -267,6 +267,14 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
       treeRoots: roots,
       treeCards: flattenTreeNodes(roots),
     };
+  }
+
+  function getSelectedCards(context) {
+    return getSelectedCardsInternal(context, false);
+  }
+
+  function getSelectedCardsOrEmpty(context) {
+    return getSelectedCardsInternal(context, true);
   }
 
   function getSelectedCardsInfo(context) {
@@ -514,6 +522,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
 
   return {
     getSelectedCards,
+    getSelectedCardsOrEmpty,
     getSelectedCardsInfo,
     getCurrentNotebookInfo,
     listCurrentCards,

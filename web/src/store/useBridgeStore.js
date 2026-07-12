@@ -15,25 +15,17 @@ const useBridgeStore = create((set) => ({
     lastHello: null,
     lastAck: null,
     lastPong: null,
-    lastSyncResult: null,
+    lastCommandResult: null,
     lastEvent: null,
     lastError: "",
     lastClose: null,
   },
   sendHistory: [],
-  syncedCards: {},
-  syncedScopes: {},
   setConnection(snapshot) {
     set({ connection: snapshot });
   },
   addSendHistory(entry) {
     set((state) => ({ sendHistory: [entry, ...state.sendHistory].slice(0, 3) }));
-  },
-  setSyncedCards(cards) {
-    set({ syncedCards: cards || {} });
-  },
-  setSyncedScopes(scopes) {
-    set({ syncedScopes: scopes || {} });
   },
 }));
 

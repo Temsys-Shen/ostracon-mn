@@ -8,12 +8,13 @@ function createMNOstraconAddon(mainPath) {
         __MN_WEB_API_MNOstraconAddon.ensureLayout(self.webController);
       };
 
-      __MN_NOTE_CHANGE_EVENTS_MNOstraconAddon.install(self);
+      self._ostraconQuoteRoot = null;
+      __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.install(self);
       console.log("[Ostracon] initialized");
     },
 
     sceneDidDisconnect: function () {
-      __MN_NOTE_CHANGE_EVENTS_MNOstraconAddon.remove(self);
+      __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.remove(self);
       if (self.webController && self.webController.view && self.webController.view.superview) {
         self.webController.view.removeFromSuperview();
       }
@@ -33,6 +34,10 @@ function createMNOstraconAddon(mainPath) {
         __MN_WEB_API_MNOstraconAddon.showPanel(self.webController);
         self.layoutViewController();
       }
+    },
+
+    notebookWillClose: function () {
+      __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.handleNotebookClose(self);
     },
 
     controllerWillLayoutSubviews: function (controller) {
@@ -72,8 +77,8 @@ function createMNOstraconAddon(mainPath) {
       Application.sharedInstance().studyController(self.window).refreshAddonCommands();
     },
 
-    onOstraconNoteChanged: function (notification) {
-      __MN_NOTE_CHANGE_EVENTS_MNOstraconAddon.handleNotification(self, notification);
+    onOstraconSelectionChanged: function () {
+      __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.handleSelectionChanged(self);
     },
   });
 }

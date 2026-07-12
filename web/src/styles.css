@@ -274,49 +274,6 @@ button:focus-visible, input:focus-visible {
   border-radius: 12px;
 }
 
-.send-btn-arrow {
-  width: 36px;
-  height: 48px;
-  border: 1px solid var(--accent);
-  border-left: none;
-  border-radius: 0 12px 12px 0;
-  background: var(--accent);
-  color: #fff;
-  font-size: 12px;
-  line-height: 1;
-  transition: background 160ms var(--ease);
-}
-.send-btn-arrow:hover { background: #1a5ad0; }
-
-.send-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  margin-top: 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-
-.send-dropdown-item {
-  width: 100%;
-  padding: 8px 12px;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 80ms;
-}
-.send-dropdown-item:last-child { border-bottom: none; }
-.send-dropdown-item:hover { background: var(--control-hover); }
-
 /* ── Expanded options panel ── */
 
 .options-panel {
@@ -504,6 +461,12 @@ button:focus-visible, input:focus-visible {
 /* ── Status toast ── */
 
 .status-toast {
+  position: fixed;
+  z-index: 850;
+  top: 8px;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 24px);
   padding: 5px 10px;
   border-radius: var(--radius);
   font-size: 12px;
@@ -511,6 +474,16 @@ button:focus-visible, input:focus-visible {
   border: 1px solid var(--line);
   color: var(--muted);
   text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(21, 24, 32, .14);
+  transform: translateX(-50%);
+  animation: status-toast-in 160ms var(--ease);
+}
+
+@keyframes status-toast-in {
+  from { opacity: 0; transform: translate(-50%, -5px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* ── History ── */
@@ -541,7 +514,6 @@ button:focus-visible, input:focus-visible {
 .history-item.ok .history-icon { color: var(--success); }
 .history-item.fail .history-icon { color: var(--error); }
 
-.history-sync-icon { font-size: 10px; flex-shrink: 0; }
 
 .history-body {
   flex: 1;
@@ -562,6 +534,140 @@ button:focus-visible, input:focus-visible {
   color: var(--accent-strong);
   text-decoration: none;
   background: var(--accent-soft);
+}
+
+/* ── Quote workspace ── */
+
+.quote-workspace {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.quote-preview, .quote-empty {
+  display: flex;
+  min-height: 150px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.quote-preview.text {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 16px;
+  color: var(--ink);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.quote-preview.image { padding: 12px; }
+.quote-preview.image img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.quote-empty { flex-direction: column; gap: 8px; color: var(--subtle); }
+
+.quote-actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quote-actions button {
+  display: flex;
+  min-width: 0;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 650;
+}
+.quote-actions button:first-child { border-color: var(--accent); background: var(--accent); color: #fff; }
+.quote-actions button:hover:not(:disabled) { border-color: #9cbaf5; background: var(--accent-soft); color: var(--accent-strong); }
+.quote-actions button:first-child:hover:not(:disabled) { background: var(--accent-strong); color: #fff; }
+.quote-actions button:disabled { cursor: default; opacity: .4; }
+.quote-actions button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.quote-root-setting {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  border-top: 1px solid var(--line);
+}
+.quote-root-setting > div { min-width: 0; flex: 1; }
+.quote-root-setting small, .quote-root-setting strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-root-setting small { color: var(--subtle); font-size: 10px; }
+.quote-root-setting strong { margin-top: 3px; font-size: 12px; }
+.quote-root-setting > button:not(.icon-button) { height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-weight: 650; }
+.quote-root-setting > button.waiting { border-color: #d39b34; background: #fff8e8; color: #8a5b00; }
+
+.quote-inline-error {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid #efb8b8;
+  border-radius: 6px;
+  background: #fff0f0;
+  color: var(--error);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.quote-picker-backdrop {
+  position: fixed;
+  z-index: 900;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(21, 24, 32, .24);
+}
+.quote-picker {
+  display: flex;
+  width: min(520px, 100%);
+  height: min(460px, 82vh);
+  min-height: 260px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 40px rgba(21, 24, 32, .18);
+}
+.quote-picker header { display: flex; height: 45px; flex: 0 0 45px; align-items: center; gap: 7px; padding: 7px; border-bottom: 1px solid var(--line); }
+.quote-picker header label { display: flex; min-width: 0; flex: 1; align-items: center; gap: 6px; height: 31px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--subtle); }
+.quote-picker header input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); }
+.quote-picker-path { height: 30px; flex: 0 0 30px; padding: 7px 10px; overflow: hidden; border-bottom: 1px solid var(--line); color: var(--subtle); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.quote-picker-list { min-height: 0; flex: 1; overflow: auto; }
+.quote-picker-list > button { display: flex; width: 100%; min-height: 40px; align-items: center; gap: 8px; padding: 5px 10px; border: 0; border-bottom: 1px solid #e9ecf1; background: transparent; color: var(--ink); text-align: left; }
+.quote-picker-list > button:hover { background: var(--accent-soft); }
+.quote-picker-list > button > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-picker-list strong, .quote-picker-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-picker-list strong { font-size: 12px; }.quote-picker-list small { margin-top: 2px; color: var(--subtle); font-size: 10px; }
+.quote-picker-loading { padding: 14px; color: var(--subtle); text-align: center; }
+
+@media (max-width: 520px) {
+  .dock-navigation button { gap: 4px; padding: 0 7px; }
+  .connection-chip { max-width: 34%; }
+  .quote-actions { grid-template-columns: 1fr; }
+  .quote-actions button { height: 36px; }
 }
 .history-ob-link:hover {
   background: #dfeaff;

@@ -39,17 +39,6 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  function renderNodeTextForSync(note, rawOptions) {
-    if (!note) throw new Error("缺少要渲染的卡片");
-    var options = rawOptions || {};
-    var includeImages = options.includeImages !== false;
-    return {
-      noteId: String(note.noteId || ""),
-      title: resolveNoteTitle(note, options),
-      canvasText: nodeText(note, includeImages, options),
-    };
-  }
-
   function createId() {
     function hex(len) {
       var s = "";
@@ -446,5 +435,5 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  return { buildCanvas: buildCanvas, renderNodeTextForSync: renderNodeTextForSync };
+  return { buildCanvas: buildCanvas };
 })();

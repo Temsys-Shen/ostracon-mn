@@ -15,7 +15,6 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     return {
       mode: src.mode === "tree" ? "tree" : "flat",
       includeImages: src.includeImages !== false,
-      includeNoteIds: Boolean(src.includeNoteIds),
       includeBacklinks: src.includeBacklinks !== false,
     };
   }
@@ -154,7 +153,6 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var nextVisitedNoteIds = { ...(visitedNoteIds || {}) };
     if (note && note.noteId) nextVisitedNoteIds[String(note.noteId)] = true;
     var heading = `${headingPrefix(headingLevel, warnings)} ${titleText}`;
-    if (options.includeNoteIds) heading += ` <!-- ostracon_noteid:${note.noteId} -->`;
     lines.push(heading);
     lines.push("");
 
@@ -184,19 +182,6 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  function renderCardForSync(note, rawOptions) {
-    if (!note) throw new Error("缺少要渲染的卡片");
-    var options = normalizeOptions({ ...rawOptions, includeNoteIds: true });
-    var warnings = createWarningBag();
-    var markdownSection = renderNote({ note: note, noteId: String(note.noteId || ""), depth: 0 }, options, warnings, {});
-    return {
-      noteId: String(note.noteId || ""),
-      title: resolveNoteTitle(note, options),
-      markdownSection: markdownSection,
-      warnings: warnings.items,
-    };
-  }
-
   function getCardsByMode(selectionResult, mode) {
     if (mode === "tree") return selectionResult.treeCards;
     return selectionResult.flatCards;
@@ -223,6 +208,5 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
 
   return {
     buildMarkdown,
-    renderCardForSync,
   };
 })();
