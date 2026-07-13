@@ -16,7 +16,7 @@ var __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon = (function () {
     if (!notebookId) throw new Error("当前学习集缺少notebookId");
     var notebook = Database.sharedInstance().getNotebookById(notebookId);
     if (!notebook) throw new Error("未找到当前学习集: " + notebookId);
-    var selection = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getSelectedCards(context);
+    var selection = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getSelectedCardsOrEmpty(context);
     var selected = selection.flatCards || [];
     var parent = selected.length === 1 ? selected[0].note : null;
     return {

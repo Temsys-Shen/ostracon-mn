@@ -288,7 +288,7 @@ export default function App() {
 
           <HistorySection history={sendHistory} vaultName={connection.vaultName} />
         </> : workspace === "browse"
-          ? <VaultBrowser connection={connection} />
+          ? <VaultBrowser connection={connection} setNotice={setNotice} />
           : <QuotePanel active={workspace === "quote"} setNotice={setNotice} />
       )}
       <BottomDock connection={connection} onStatusClick={requestDisconnect} workspace={workspace} setWorkspace={setWorkspace} />

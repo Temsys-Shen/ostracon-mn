@@ -165,7 +165,7 @@ function Preview({ document, markdown, assetUrls, onOpen, onBack }) {
   );
 }
 
-function VaultBrowser({ connection }) {
+function VaultBrowser({ connection, setNotice }) {
   const browser = useVaultBrowser(connection);
   const importer = useDocumentImport();
   const bodyRef = useRef(null);
@@ -186,6 +186,11 @@ function VaultBrowser({ connection }) {
     return () => window.clearTimeout(timer);
   }, [searchText, browser.search]);
 
+  useEffect(() => {
+    const message = importer.error || importer.contextError || browser.error;
+    if (message) setNotice(message);
+  }, [browser.error, importer.contextError, importer.error, setNotice]);
+
   const goParent = () => {
     const parts = browser.folderPath.split("/").filter(Boolean);
     parts.pop(); browser.loadFolder(parts.join("/"));
@@ -204,7 +209,16 @@ function VaultBrowser({ connection }) {
   const showDocuments = Boolean(searchText || mode === "files" || browser.selectedTag);
   const importBusy = importer.status === "uploading" || importer.status === "appending" || importer.status === "creating";
   const hasCurrentCard = importer.context?.selectedCount === 1;
-  const importTarget = importer.contextError || (hasCurrentCard ? importer.context.targetTitle : "学习集根部");
+  const importTarget = hasCurrentCard ? importer.context.targetTitle : "学习集根部";
+
+  const handleImport = async (operation) => {
+    try {
+      await importer.insert(browser.document, browser.insertMarkdown, operation);
+      setNotice(operation === "append" ? "已追加到当前卡片" : "已创建到学习集");
+    } catch (error) {
+      setNotice(error.message || String(error));
+    }
+  };
 
   const startSidebarResize = (event) => {
     if (sidebarCollapsed || event.button !== 0) return;
@@ -232,7 +246,6 @@ function VaultBrowser({ connection }) {
         <div className="view-switch"><button className={mode === "files" ? "active" : ""} onClick={() => { setMode("files"); browser.loadFolder(""); }} type="button"><Folder size={14} />文件</button><button className={mode === "tags" ? "active" : ""} onClick={() => setMode("tags")} type="button"><Hash size={14} />标签</button></div>
         <label className="search-box"><Search size={15} /><input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder={browser.state?.searchStatus === "building" ? "正在建立索引" : "搜索文档"} /></label>
       </div>
-      {browser.error && <div className="browser-error">{browser.error}</div>}
       <div className={`browser-body${sidebarCollapsed ? " sidebar-collapsed" : ""}`} ref={bodyRef} style={{ "--sidebar-width": `${sidebarWidth}px` }}>
         <aside className="browser-list-pane" ref={listPaneRef}>
           <div className="folder-head">
@@ -248,8 +261,7 @@ function VaultBrowser({ connection }) {
         {sidebarCollapsed && <button className="icon-button sidebar-expand" onClick={() => setSidebarCollapsed(false)} title="展开文件栏" type="button"><PanelLeftOpen size={16} /></button>}
         <Preview document={browser.document} markdown={browser.previewMarkdown} assetUrls={browser.assetUrls} onOpen={browser.openDocument} onBack={() => browser.setDocument(null)} />
       </div>
-      {browser.document && <footer className="insert-bar"><div className="insert-target"><small>目标</small><strong>{importTarget}</strong></div><div className="insert-actions">{hasCurrentCard && <button className="secondary" disabled={importBusy} onClick={() => importer.insert(browser.document, browser.insertMarkdown, "append")} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "appending" ? "追加中" : importer.status === "success" && importer.result?.operation === "append" ? "已追加" : "追加到当前卡片"}</button>}<button disabled={importBusy} onClick={() => importer.insert(browser.document, browser.insertMarkdown, "create")} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "creating" ? "创建中" : importer.status === "success" && importer.result?.operation === "create" ? "已创建" : "创建卡片"}</button></div></footer>}
-      {importer.error && <div className="browser-error import-error">{importer.error}</div>}
+      {browser.document && <footer className="insert-bar"><div className="insert-target"><small>目标</small><strong>{importTarget}</strong></div><div className="insert-actions">{hasCurrentCard && <button className="secondary" disabled={importBusy} onClick={() => handleImport("append")} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "appending" ? "追加中" : "追加到当前卡片"}</button>}<button disabled={importBusy} onClick={() => handleImport("create")} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "creating" ? "创建中" : "创建卡片"}</button></div></footer>}
     </div>
   );
 }
