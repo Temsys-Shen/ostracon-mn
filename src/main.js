@@ -1,6 +1,8 @@
 JSB.require("WebDevServerConfig");
 JSB.require("CardSelectionService");
 JSB.require("OstraconUtils");
+JSB.require("InkDrawingService");
+JSB.require("CardContentService");
 JSB.require("MarkdownExportService");
 JSB.require("CanvasExportService");
 JSB.require("QuoteSelectionService");

@@ -41,6 +41,7 @@ function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoad
       format,
       isCanvas: format === "canvas",
       objects: Array.isArray(cardsResult?.cards) ? cardsResult.cards : [],
+      fileName: fileBaseName,
     }));
 
     return { packet, noteCount, fileBaseName };

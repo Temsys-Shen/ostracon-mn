@@ -66,7 +66,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     if (!selectionItem) return null;
     if (selectionItem.note && selectionItem.note.note) return selectionItem.note;
     if (selectionItem.note && selectionItem.note.noteId) return selectionItem;
-    if (selectionItem.noteId || selectionItem.comments || selectionItem.excerptText) {
+    if (selectionItem.noteId || selectionItem.comments) {
       return {
         note: selectionItem,
         parentNode: selectionItem.parentNode,
@@ -282,57 +282,35 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     const indexed = indexSelectedNodes(items);
     const firstCard = indexed.orderedNodes[0];
     const note = firstCard ? firstCard.note : null;
-    const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
-
     let totalComments = 0;
     let totalImages = 0;
     indexed.orderedNodes.forEach(function (node) {
-      const comments = node.note ? arrayFromNSArray(node.note.comments) : [];
-      if (node.note && node.note.excerptPic && node.note.excerptPic.paint) {
-        totalImages += 1;
-      }
-      totalComments += comments.length;
-      comments.forEach(function (comment) {
-        if (comment && comment.type === "PaintNote") {
-          totalImages += 1;
-        }
-      });
+      const content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(node.note);
+      totalComments += content.commentCount;
+      totalImages += content.imageCount;
     });
 
     return {
       noteCount: indexed.orderedNodes.length,
       imageCount: totalImages,
       commentCount: totalComments,
-      sourceTitle: note ? __MN_OSTRACON_UTILS_MNOstraconAddon.resolveNoteTitle(note, prefs) : "",
+      sourceTitle: note ? __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note).title : "",
       noteIds: indexed.orderedNodes.map(function (node) { return node.noteId; }),
     };
   }
 
   function summarizeNote(node) {
     const note = node.note;
-    const comments = arrayFromNSArray(note.comments);
-    let firstTextComment = "";
-    let hasImage = false;
-    const _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
-    const _normalizeText = _utils.normalizeText;
-    const _usesExcerptAsTitle = _utils.usesExcerptAsTitle;
-    const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
-    comments.forEach(function (comment) {
-      if (!comment || !comment.type) return;
-      if (!firstTextComment && comment.type === "TextNote") firstTextComment = _normalizeText(comment.text);
-      if (comment.type === "PaintNote") hasImage = true;
-    });
-    if (note.excerptPic && note.excerptPic.paint) hasImage = true;
+    const content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
 
     return {
       id: node.noteId,
-      title: _utils.resolveNoteTitle(note, prefs),
-      excerpt: _usesExcerptAsTitle(note) ? "" : _normalizeText(note.excerptText),
-      comment: firstTextComment,
+      title: content.title,
+      comment: content.commentText,
       sourceAnchor: "marginnote4app://note/" + node.noteId,
       selected: true,
-      hasImage: hasImage,
-      hasHandwriting: hasImage,
+      hasImage: content.hasImage,
+      hasHandwriting: content.hasHandwriting,
     };
   }
 
@@ -423,32 +401,16 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   }
 
   function summarizeDbNote(note) {
-    var firstTextComment = "";
-    var hasImage = false;
-    var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
-    var _normalizeText = _utils.normalizeText;
-    var _usesExcerptAsTitle = _utils.usesExcerptAsTitle;
-    var prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
-    try {
-      var comments = arrayFromNSArray(note.comments);
-      for (var i = 0; i < comments.length; i++) {
-        var comment = comments[i];
-        if (!comment || !comment.type) continue;
-        if (!firstTextComment && comment.type === "TextNote") firstTextComment = _normalizeText(comment.text);
-        if (comment.type === "PaintNote") hasImage = true;
-      }
-      if (note.excerptPic && note.excerptPic.paint) hasImage = true;
-    } catch (_) {}
+    var content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
 
     return {
       id: String(note.noteId || ""),
-      title: _utils.resolveNoteTitle(note, prefs),
-      excerpt: _usesExcerptAsTitle(note) ? "" : _normalizeText(note.excerptText),
-      comment: firstTextComment,
+      title: content.title,
+      comment: content.commentText,
       sourceAnchor: "marginnote4app://note/" + String(note.noteId || ""),
       selected: false,
-      hasImage: hasImage,
-      hasHandwriting: hasImage,
+      hasImage: content.hasImage,
+      hasHandwriting: content.hasHandwriting,
       colorIndex: typeof note.colorIndex === "number" ? Number(note.colorIndex) : undefined,
     };
   }

@@ -26,7 +26,7 @@ var __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon = (function () {
       selectedCount: selected.length,
       parent: parent,
       targetKind: parent ? "child" : "root",
-      targetTitle: parent ? __MN_OSTRACON_UTILS_MNOstraconAddon.resolveNoteTitle(parent, {}) : String(notebook.title || "当前学习集"),
+      targetTitle: parent ? __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(parent).title : String(notebook.title || "当前学习集"),
     };
   }
 

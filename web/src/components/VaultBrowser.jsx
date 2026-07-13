@@ -1,4 +1,4 @@
-import React, { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -10,16 +10,26 @@ import { ArrowLeft, ChevronRight, FileText, Folder, Hash, Link2, PanelLeftClose,
 import { useVaultBrowser } from "../hooks/useVaultBrowser";
 import { useDocumentImport } from "../hooks/useDocumentImport";
 
-function DocumentList({ items, onOpen }) {
-  const parentRef = useRef(null);
-  const virtualizer = useVirtualizer({ count: items.length, getScrollElement: () => parentRef.current, estimateSize: () => 44, overscan: 8 });
+function DocumentList({ items, onOpen, scrollRef }) {
+  const listRef = useRef(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useLayoutEffect(() => {
+    setScrollMargin(listRef.current?.offsetTop || 0);
+  }, [items]);
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 44,
+    overscan: 8,
+    scrollMargin,
+  });
   return (
-    <div className="document-list" ref={parentRef}>
+    <div className="document-list" ref={listRef}>
       <div className="virtual-list" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map(row => {
           const item = items[row.index];
           return (
-            <button className="document-row" key={item.path} style={{ transform: `translateY(${row.start}px)` }} onClick={() => onOpen(item.path)} type="button">
+            <button className="document-row" key={item.path} style={{ transform: `translateY(${row.start - scrollMargin}px)` }} onClick={() => onOpen(item.path)} type="button">
               <FileText size={15} />
               <span className="document-row-copy"><strong>{item.title}</strong><small>{item.path}</small></span>
               <ChevronRight size={14} />
@@ -159,6 +169,7 @@ function VaultBrowser({ connection }) {
   const browser = useVaultBrowser(connection);
   const importer = useDocumentImport();
   const bodyRef = useRef(null);
+  const listPaneRef = useRef(null);
   const [mode, setMode] = useState("files");
   const [searchText, setSearchText] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(280);
@@ -223,7 +234,7 @@ function VaultBrowser({ connection }) {
       </div>
       {browser.error && <div className="browser-error">{browser.error}</div>}
       <div className={`browser-body${sidebarCollapsed ? " sidebar-collapsed" : ""}`} ref={bodyRef} style={{ "--sidebar-width": `${sidebarWidth}px` }}>
-        <aside className="browser-list-pane">
+        <aside className="browser-list-pane" ref={listPaneRef}>
           <div className="folder-head">
             {sidebarBack && <button className="icon-button" onClick={sidebarBack} title="返回" type="button"><ArrowLeft size={15} /></button>}
             <span>{sidebarTitle}</span>
@@ -231,7 +242,7 @@ function VaultBrowser({ connection }) {
           </div>
           {!searchText && mode === "files" && (browser.folder.folders || []).map(item => <button className="folder-row" key={item.path} onClick={() => browser.loadFolder(item.path)} type="button"><Folder size={15} /><span>{item.name}</span><ChevronRight size={14} /></button>)}
           {!searchText && mode === "tags" && !browser.selectedTag && <div className="tag-list">{browser.tags.map(tag => <button key={tag.name} onClick={() => browser.chooseTag(tag.name)} type="button"><span>{tag.name}</span><small>{tag.count}</small></button>)}</div>}
-          {showDocuments && (browser.loading && browser.activeDocuments.length === 0 ? <div className="browser-skeleton"><i /><i /><i /><i /></div> : <DocumentList items={browser.activeDocuments} onOpen={browser.openDocument} />)}
+          {showDocuments && (browser.loading && browser.activeDocuments.length === 0 ? <div className="browser-skeleton"><i /><i /><i /><i /></div> : <DocumentList items={browser.activeDocuments} onOpen={browser.openDocument} scrollRef={listPaneRef} />)}
         </aside>
         <div className="sidebar-resizer" onPointerDown={startSidebarResize} role="separator" aria-label="调整文件栏宽度" aria-orientation="vertical" />
         {sidebarCollapsed && <button className="icon-button sidebar-expand" onClick={() => setSidebarCollapsed(false)} title="展开文件栏" type="button"><PanelLeftOpen size={16} /></button>}

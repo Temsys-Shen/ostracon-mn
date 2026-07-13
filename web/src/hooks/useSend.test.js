@@ -37,6 +37,7 @@ describe("useSend", () => {
     expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeMarkdown", { scope, options: props.prefs }, 30000);
     expect(MNBridge.send).toHaveBeenNthCalledWith(2, "listScopeCards", { scope }, 30000);
     expect(ostraconWsClient.sendPacket).toHaveBeenCalledOnce();
+    expect(ostraconWsClient.sendPacket.mock.calls[0][0].fileName).toBe("Example");
     expect(props.setNotice).toHaveBeenLastCalledWith("✓ 已发送 2张");
   });
 
@@ -51,6 +52,7 @@ describe("useSend", () => {
 
     expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeCanvas", { scope: "mindmap", options: props.prefs }, 30000);
     expect(ostraconWsClient.sendPacket.mock.calls[0][0].format).toBe("canvas");
+    expect(ostraconWsClient.sendPacket.mock.calls[0][0].fileName).toBe("Brain");
   });
 
   test("reports a send failure", async () => {

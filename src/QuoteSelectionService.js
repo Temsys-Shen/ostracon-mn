@@ -101,7 +101,7 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     const root = {
       notebookId: currentNotebookId(context),
       noteId: String(note.noteId),
-      title: __MN_OSTRACON_UTILS_MNOstraconAddon.resolveNoteTitle(note, {}),
+      title: __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note).title,
     };
     context.addon._ostraconQuoteRoot = root;
     return { selected: true, root: root };

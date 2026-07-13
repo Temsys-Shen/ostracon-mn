@@ -1,38 +1,25 @@
 var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
-  var normalizeText = _utils.normalizeText;
-  var imageDataURI = _utils.imageDataURI;
   var arrayFromNSArray = _utils.arrayFromNSArray;
-  var resolveNoteTitle = _utils.resolveNoteTitle;
-  var usesExcerptAsTitle = _utils.usesExcerptAsTitle;
   var MN_COLORS = _utils.MN_COLORS;
+  var _contentService = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
+  var parseNote = _contentService.parseNote;
+  var resolveFileBaseName = _contentService.resolveFileBaseName;
 
   function nodeText(note, includeImages, options) {
     var lines = [];
-    var title = resolveNoteTitle(note, options || {});
-    var excerpt = usesExcerptAsTitle(note) ? "" : normalizeText(note.excerptText);
+    var content = parseNote(note);
 
-    lines.push("## " + title);
+    lines.push("## " + content.title);
     lines.push("");
 
-    if (excerpt) {
-      lines.push("> " + excerpt);
-      lines.push("");
-    }
-
-    if (includeImages && note.excerptPic && note.excerptPic.paint) {
-      var excerptUri = imageDataURI(note.excerptPic.paint);
-      if (excerptUri) { lines.push("![](" + excerptUri + ")"); lines.push(""); }
-    }
-
-    arrayFromNSArray(note.comments).forEach(function (comment) {
-      if (!comment || !comment.type) return;
-      if (comment.type === "TextNote") {
-        var text = normalizeText(comment.text);
-        if (text) { lines.push(text); lines.push(""); }
-      } else if (comment.type === "PaintNote" && includeImages) {
-        var uri = imageDataURI(comment.paint);
-        if (uri) { lines.push("![](" + uri + ")"); lines.push(""); }
+    content.comments.forEach(function (comment) {
+      if (comment.type === "text") {
+        lines.push(comment.text);
+        lines.push("");
+      } else if (comment.type === "image" && includeImages) {
+        lines.push("![" + (comment.alt || "") + "](" + comment.dataURI + ")");
+        lines.push("");
       }
     });
 
@@ -256,14 +243,15 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var treeRoots = selectionResult.treeRoots;
 
     var nodes = flatCards.map(function (card) {
+      var text = nodeText(card.note, includeImages, options);
       var node = {
         id: card.noteId,
         type: "text",
         x: 0,
         y: 0,
         width: LAYOUT_CONFIG.nodeWidth,
-        height: estimateHeight(nodeText(card.note, includeImages, options)),
-        text: nodeText(card.note, includeImages, options),
+        height: estimateHeight(text),
+        text: text,
       };
       if (card.note.colorIndex >= 0) {
         node.color = MN_COLORS[card.note.colorIndex];
@@ -432,6 +420,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
       canvas: JSON.stringify(canvasObj, null, 2),
       nodeCount: nodes.length,
       edgeCount: edges.length,
+      fileBaseName: flatCards[0] && flatCards[0].note ? resolveFileBaseName(flatCards[0].note) : "Untitled",
     };
   }
 

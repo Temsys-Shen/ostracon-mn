@@ -59,7 +59,7 @@ body {
 .folder-row { height: 36px; padding: 0 9px; border-bottom: 1px solid #e9ecf1; }
 .folder-row span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-row:hover, .document-row:hover, .tag-list button:hover { background: var(--accent-soft); }
-.document-list { position: relative; min-height: 120px; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; }
+.document-list { position: relative; min-height: 0; flex: 0 0 auto; overflow: visible; }
 .virtual-list { position: relative; width: 100%; }
 .document-row { position: absolute; left: 0; height: 44px; padding: 5px 8px; border-bottom: 1px solid #e9ecf1; }
 .document-row-copy { min-width: 0; flex: 1; }
@@ -601,6 +601,7 @@ button:focus-visible, input:focus-visible {
 .quote-actions button:first-child:hover:not(:disabled) { background: var(--accent-strong); color: #fff; }
 .quote-actions button:disabled { cursor: default; opacity: .4; }
 .quote-actions button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-actions button svg { flex: 0 0 auto; }
 
 .quote-root-setting {
   display: flex;
@@ -666,8 +667,8 @@ button:focus-visible, input:focus-visible {
 @media (max-width: 520px) {
   .dock-navigation button { gap: 4px; padding: 0 7px; }
   .connection-chip { max-width: 34%; }
-  .quote-actions { grid-template-columns: 1fr; }
-  .quote-actions button { height: 36px; }
+  .quote-actions { gap: 4px; }
+  .quote-actions button { height: 36px; gap: 3px; padding: 0 4px; font-size: 11px; }
 }
 .history-ob-link:hover {
   background: #dfeaff;

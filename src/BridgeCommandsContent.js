@@ -27,6 +27,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
       canvas: result.canvas,
       nodeCount: result.nodeCount,
       edgeCount: result.edgeCount,
+      fileBaseName: result.fileBaseName,
     };
   }
 
@@ -48,7 +49,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
       scopeTitle: scopeResult.title,
       markdown: result.markdown,
       noteCount: result.noteCount,
-      fileBaseName: scopeResult.title || result.fileBaseName,
+      fileBaseName: result.fileBaseName,
       warnings: result.warnings,
     };
   }
@@ -65,7 +66,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
       canvas: result.canvas,
       nodeCount: result.nodeCount,
       edgeCount: result.edgeCount,
-      fileBaseName: scopeResult.title || "ostracon-canvas",
+      fileBaseName: result.fileBaseName,
     };
   }
 
@@ -95,7 +96,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
         format,
         canvas: canvas.canvas,
         noteCount: canvas.nodeCount,
-        fileBaseName: "ostracon-canvas",
+        fileBaseName: canvas.fileBaseName,
         cards,
       };
     }

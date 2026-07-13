@@ -14,6 +14,7 @@ function createPacketDraft({
   format = "markdown",
   isCanvas = false,
   objects = null,
+  fileName = "",
 } = {}) {
   const now = new Date().toISOString();
   const packetObjects = Array.isArray(objects)
@@ -21,7 +22,6 @@ function createPacketDraft({
       id: item.id || createId("card"),
       kind: item.kind || "Card",
       title: item.title || "",
-      excerpt: item.excerpt || "",
       comment: item.comment || "",
       sourceAnchor: item.sourceAnchor || "",
       hasImage: Boolean(item.hasImage),
@@ -32,7 +32,6 @@ function createPacketDraft({
         id: createId("card"),
         kind: "Card",
         title: sourceTitle,
-        excerpt: "Canvas export with " + (isCanvas ? "nodes" : "markdown"),
         comment: "",
         sourceAnchor: "",
         hasImage: false,
@@ -53,6 +52,7 @@ function createPacketDraft({
     objects: packetObjects,
     relations: [],
     notes: markdown,
+    fileName,
     destination: { platform: "Obsidian", vault: "", folder },
   };
 }
@@ -91,11 +91,12 @@ function normalizePacket(packet) {
     tags: normalizeTags(packet.tags),
     objects: packet.objects.map(item => ({
       id: item.id || createId("object"), kind: item.kind || "Card", title: item.title || "",
-      excerpt: item.excerpt || "", comment: item.comment || "", sourceAnchor: item.sourceAnchor || "",
+      comment: item.comment || "", sourceAnchor: item.sourceAnchor || "",
       hasImage: Boolean(item.hasImage), hasHandwriting: Boolean(item.hasHandwriting),
     })),
     relations: Array.isArray(packet.relations) ? packet.relations : [],
     notes: packet.notes || "",
+    fileName: packet.fileName || "",
     destination: packet.destination || { platform: "Obsidian", vault: "", folder: "Inbox" },
   };
 }
