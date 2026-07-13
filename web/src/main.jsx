@@ -9,3 +9,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <App />
   </React.StrictMode>,
 );
+
+window.__OSTRACON_APP_MOUNTED__ = true;

@@ -21,7 +21,11 @@ function useVaultBrowser(connection) {
 
   const loadState = useCallback(async () => {
     if (!connection.connected) return;
-    setState(await command("getVaultBrowserState"));
+    try {
+      setState(await command("getVaultBrowserState"));
+    } catch (e) {
+      setError(e.message || String(e));
+    }
   }, [connection.connected, command]);
 
   const loadFolder = useCallback(async (path = "") => {

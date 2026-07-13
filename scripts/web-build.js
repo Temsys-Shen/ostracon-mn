@@ -92,12 +92,22 @@ function main() {
             "</div>";
         }
         window.onerror = function (message, source, line, column, error) {
-          showBuildError(error && error.message ? error.message : message);
+          var detail = error && error.message ? error.message : message;
+          if (window.__OSTRACON_APP_MOUNTED__) {
+            console.error("[Ostracon] runtime error:", detail);
+            return;
+          }
+          showBuildError(detail);
         };
         if (window.addEventListener) {
           window.addEventListener("unhandledrejection", function (event) {
             var reason = event && event.reason;
-            showBuildError(reason && reason.message ? reason.message : reason);
+            var detail = reason && reason.message ? reason.message : reason;
+            if (window.__OSTRACON_APP_MOUNTED__) {
+              console.error("[Ostracon] unhandled rejection:", detail);
+              return;
+            }
+            showBuildError(detail);
           });
         }
       })();
