@@ -73,9 +73,36 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     return normalizeText(value).replace(/[[\]\\]/g, "\\$&");
   }
 
-  function buildHeadingTitle(note, content, options) {
-    if (!options.includeBacklinks || !content.noteId || content.noteId === "unknown") return content.title;
-    return `[${escapeLinkText(content.title)}](marginnote4app://note/${content.noteId})`;
+  function renderCardTemplate(template, context) {
+    if (typeof template !== "string") throw new Error("卡片模板必须是字符串");
+    var tokenPattern = /{{([\s\S]*?)}}/g;
+    var output = "";
+    var cursor = 0;
+    var insideLink = false;
+    var match;
+    while ((match = tokenPattern.exec(template)) !== null) {
+      if (!insideLink || context.link) output += template.slice(cursor, match.index);
+      var expression = match[1].trim();
+      if (expression === "#link") insideLink = true;
+      else if (expression === "/link") insideLink = false;
+      else if (!insideLink || context.link) {
+        var parts = expression.split("|").map(function (part) { return part.trim(); });
+        var variable = parts.shift();
+        if (variable !== "content" && variable !== "title" && variable !== "heading") throw new Error("未知卡片模板变量: " + variable);
+        var value = variable === "content" ? context.content : (variable === "title" ? context.title : context.heading);
+        parts.forEach(function (filter) {
+          if (filter === "trim") value = value.trim();
+          else if (filter === "singleline") value = value.replace(/\s+/g, " ");
+          else if (filter === "link" && variable === "title") value = context.link ? "[" + escapeLinkText(value) + "](" + context.link + ")" : value;
+          else throw new Error("未知卡片模板过滤器: " + filter);
+        });
+        output += value;
+      }
+      cursor = tokenPattern.lastIndex;
+    }
+    if (insideLink) throw new Error("卡片模板缺少{{/link}}");
+    output += template.slice(cursor);
+    return output.trim();
   }
 
   function renderNote(card, options, warnings) {
@@ -84,9 +111,6 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     const headingLevel = options.mode === "tree" ? card.depth + 1 : 2;
     const contentBase = options.mode === "tree" ? headingLevel : 2;
     var lines = [];
-    var heading = `${headingPrefix(headingLevel, warnings)} ${buildHeadingTitle(note, content, options)}`;
-    lines.push(heading);
-    lines.push("");
 
     for (var commentIndex = 0; commentIndex < content.comments.length; commentIndex++) {
       var comment = content.comments[commentIndex];
@@ -97,7 +121,13 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       }
     }
 
-    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    return {
+      heading: headingPrefix(headingLevel, warnings),
+      title: content.title,
+      link: options.includeBacklinks && content.noteId && content.noteId !== "unknown"
+        ? "marginnote4app://note/" + content.noteId : null,
+      content: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+    };
   }
 
   function getCardsByMode(selectionResult, mode) {
@@ -109,8 +139,9 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var options = normalizeOptions(rawOptions);
     var warnings = createWarningBag();
     var cards = getCardsByMode(selectionResult, options.mode);
+    var template = rawOptions && typeof rawOptions.cardTemplate === "string" ? rawOptions.cardTemplate : "{{heading}} {{title|link}}\n\n{{content}}";
     var sections = cards.map(function (card) {
-      return renderNote(card, options, warnings);
+      return renderCardTemplate(template, renderNote(card, options, warnings));
     }).filter(function (s) { return s.length > 0; });
 
     var firstCard = cards[0] && cards[0].note ? cards[0].note : null;
