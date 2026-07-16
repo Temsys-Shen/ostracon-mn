@@ -60,6 +60,23 @@ function selectionFor(note) {
   return { flatCards: [card], treeRoots: [card], treeCards: [card] };
 }
 
+function rootCard(note, index) {
+  return {
+    note,
+    noteId: note.noteId,
+    selectionIndex: index,
+    x: 0,
+    y: index,
+    depth: 0,
+    children: [],
+  };
+}
+
+function multiRootSelection(notes) {
+  const roots = notes.map(rootCard);
+  return { flatCards: roots, treeRoots: roots, treeCards: roots };
+}
+
 describe("CardContentService", () => {
   test("uses the first text line as title and preserves duplicate PaintNote comments", () => {
     const context = createRuntime({ media: "cG5n" });
@@ -139,6 +156,44 @@ describe("CardContentService", () => {
     const canvas = context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
     expect(markdown.fileBaseName).toBe("摘录文件名");
     expect(canvas.fileBaseName).toBe("摘录文件名");
+  });
+
+  test("uses the earliest root card as tree Markdown and Canvas file name", () => {
+    const context = createRuntime();
+    const newer = { noteId: "newer-root", noteTitle: "后创建根", createDate: new Date("2026-07-12T00:00:00+08:00"), comments: [] };
+    const older = { noteId: "older-root", noteTitle: "先创建根", createDate: new Date("2026-07-10T00:00:00+08:00"), comments: [] };
+    const selection = multiRootSelection([newer, older]);
+
+    const treeMarkdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, { mode: "tree" });
+    const canvas = context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
+
+    expect(treeMarkdown.fileBaseName).toBe("先创建根");
+    expect(canvas.fileBaseName).toBe("先创建根");
+  });
+
+  test("keeps flat Markdown file name based on the first card", () => {
+    const context = createRuntime();
+    const newer = { noteId: "newer-root", noteTitle: "平铺首卡", createDate: new Date("2026-07-12T00:00:00+08:00"), comments: [] };
+    const older = { noteId: "older-root", noteTitle: "更早根", createDate: new Date("2026-07-10T00:00:00+08:00"), comments: [] };
+    const selection = multiRootSelection([newer, older]);
+
+    const flatMarkdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, { mode: "flat" });
+
+    expect(flatMarkdown.fileBaseName).toBe("平铺首卡");
+  });
+
+  test("keeps root order when root create dates are equal", () => {
+    const context = createRuntime();
+    const createdAt = new Date("2026-07-10T00:00:00+08:00");
+    const first = { noteId: "first-root", noteTitle: "同时间第一根", createDate: createdAt, comments: [] };
+    const second = { noteId: "second-root", noteTitle: "同时间第二根", createDate: createdAt, comments: [] };
+    const selection = multiRootSelection([first, second]);
+
+    const treeMarkdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, { mode: "tree" });
+    const canvas = context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
+
+    expect(treeMarkdown.fileBaseName).toBe("同时间第一根");
+    expect(canvas.fileBaseName).toBe("同时间第一根");
   });
 
   test("keeps the remaining lines of the title comment in place", () => {

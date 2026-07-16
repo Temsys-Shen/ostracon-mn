@@ -119,6 +119,29 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     return "Untitled";
   }
 
+  function resolveEarliestRootNote(selectionResult) {
+    var roots = selectionResult && selectionResult.treeRoots ? selectionResult.treeRoots : [];
+    if (roots.length === 0) return null;
+    if (roots.length === 1) return roots[0].note;
+
+    var earliest = roots[0];
+    var earliestTime = earliest.note.createDate.getTime();
+    for (var index = 1; index < roots.length; index++) {
+      var root = roots[index];
+      var time = root.note.createDate.getTime();
+      if (time < earliestTime) {
+        earliest = root;
+        earliestTime = time;
+      }
+    }
+    return earliest.note;
+  }
+
+  function resolveRootFileBaseName(selectionResult) {
+    var note = resolveEarliestRootNote(selectionResult);
+    return note ? resolveFileBaseName(note) : "Untitled";
+  }
+
   function parseNote(note) {
     if (!note) throw new Error("缺少MN卡片对象");
 
@@ -239,5 +262,5 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  return { parseNote: parseNote, resolveFileBaseName: resolveFileBaseName };
+  return { parseNote: parseNote, resolveFileBaseName: resolveFileBaseName, resolveRootFileBaseName: resolveRootFileBaseName };
 })();

@@ -4,7 +4,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var MN_COLORS = _utils.MN_COLORS;
   var _contentService = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
   var parseNote = _contentService.parseNote;
-  var resolveFileBaseName = _contentService.resolveFileBaseName;
+  var resolveRootFileBaseName = _contentService.resolveRootFileBaseName;
 
   function nodeText(note, includeImages, options) {
     var lines = [];
@@ -420,7 +420,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
       canvas: JSON.stringify(canvasObj, null, 2),
       nodeCount: nodes.length,
       edgeCount: edges.length,
-      fileBaseName: flatCards[0] && flatCards[0].note ? resolveFileBaseName(flatCards[0].note) : "Untitled",
+      fileBaseName: resolveRootFileBaseName(selectionResult),
     };
   }
 

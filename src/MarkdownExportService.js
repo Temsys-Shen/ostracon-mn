@@ -4,6 +4,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var _contentService = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
   var parseNote = _contentService.parseNote;
   var resolveFileBaseName = _contentService.resolveFileBaseName;
+  var resolveRootFileBaseName = _contentService.resolveRootFileBaseName;
 
   function sanitizeFilePart(value) {
     return normalizeText(value).replace(/[^A-Za-z0-9._\u4e00-\u9fff-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "unknown";
@@ -113,7 +114,9 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     }).filter(function (s) { return s.length > 0; });
 
     var firstCard = cards[0] && cards[0].note ? cards[0].note : null;
-    var firstTitle = firstCard ? resolveFileBaseName(firstCard) : "Untitled";
+    var firstTitle = options.mode === "tree"
+      ? resolveRootFileBaseName(selectionResult)
+      : (firstCard ? resolveFileBaseName(firstCard) : "Untitled");
 
     return {
       markdown: sections.join("\n\n") + "\n",
