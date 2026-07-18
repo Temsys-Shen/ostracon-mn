@@ -171,6 +171,17 @@ describe("CardContentService", () => {
     expect(canvas.fileBaseName).toBe("先创建根");
   });
 
+  test("rejects duplicate Canvas node ids and relations", () => {
+    const context = createRuntime();
+    const childNote = { noteId: "child", noteTitle: "子卡片", comments: [] };
+    const rootNote = { noteId: "root", noteTitle: "根卡片", comments: [] };
+    const child = rootCard(childNote, 1);
+    const root = { ...rootCard(rootNote, 0), children: [child, child] };
+
+    expect(() => context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas({ flatCards: [root, root], treeRoots: [root], treeCards: [root, child] }, {})).toThrow("Canvas包含重复节点: root");
+    expect(() => context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas({ flatCards: [root, child], treeRoots: [root], treeCards: [root, child] }, {})).toThrow("Canvas包含重复关系: root->child");
+  });
+
   test("keeps flat Markdown file name based on the first card", () => {
     const context = createRuntime();
     const newer = { noteId: "newer-root", noteTitle: "平铺首卡", createDate: new Date("2026-07-12T00:00:00+08:00"), comments: [] };

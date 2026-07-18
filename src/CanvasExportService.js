@@ -241,6 +241,13 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var includeImages = options.includeImages !== false;
     var flatCards = selectionResult.flatCards;
     var treeRoots = selectionResult.treeRoots;
+    var inputNodeIds = {};
+    flatCards.forEach(function (card) {
+      var noteId = String(card && card.noteId || "");
+      if (!noteId) throw new Error("Canvas卡片缺少noteId");
+      if (inputNodeIds[noteId]) throw new Error("Canvas包含重复节点: " + noteId);
+      inputNodeIds[noteId] = true;
+    });
 
     var nodes = flatCards.map(function (card) {
       var text = nodeText(card.note, includeImages, options);
@@ -313,6 +320,13 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
     });
 
     var edges = [];
+    var edgeKeys = {};
+    function addEdge(fromNode, fromSide, toNode, toSide) {
+      var key = fromNode + "->" + toNode;
+      if (edgeKeys[key]) throw new Error("Canvas包含重复关系: " + key);
+      edgeKeys[key] = true;
+      edges.push({ id: createId(), fromNode: fromNode, fromSide: fromSide, toNode: toNode, toSide: toSide });
+    }
     function walkTree(node) {
       node.children.forEach(function (child) {
         if (!node.noteId || !child.noteId) return;
@@ -320,13 +334,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
         var fromNode = nodesById[node.noteId];
         var toNode = nodesById[child.noteId];
         var side = computeEdgeSide(fromNode, toNode);
-        edges.push({
-          id: createId(),
-          fromNode: node.noteId,
-          fromSide: side.fromSide,
-          toNode: child.noteId,
-          toSide: side.toSide,
-        });
+        addEdge(node.noteId, side.fromSide, child.noteId, side.toSide);
         walkTree(child);
       });
     }
@@ -408,11 +416,14 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
           nodesById[uuid] = childNode;
           cursorY = childNode.y + childNode.height + SUMMARY_GAP;
         }
-        edges.push({
-          id: createId(), fromNode: uuid, fromSide: "right",
-          toNode: summaryId, toSide: "left",
-        });
+        addEdge(uuid, "right", summaryId, "left");
       });
+    });
+
+    var outputNodeIds = {};
+    nodes.forEach(function (node) {
+      if (outputNodeIds[node.id]) throw new Error("Canvas输出包含重复节点: " + node.id);
+      outputNodeIds[node.id] = true;
     });
 
     var canvasObj = { nodes: nodes, edges: edges };

@@ -191,24 +191,63 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return result;
   }
 
-  function buildNoteTree(note, selectionIndex, depth) {
-    const children = arrayFromNSArray(note.childNotes).map(function (childNote, childIndex) {
-      return buildNoteTree(childNote, selectionIndex + "-" + childIndex, depth + 1);
+  function selectionFromRootNotes(notes) {
+    const notesById = {};
+    const orderedIds = [];
+    notes.forEach(function (note) {
+      const noteId = String(note && note.noteId || "");
+      if (!noteId) throw new Error("学习集卡片缺少noteId");
+      if (notesById[noteId]) return;
+      notesById[noteId] = note;
+      orderedIds.push(noteId);
     });
-    return {
-      note,
-      noteId: String(note.noteId || ""),
-      selectionIndex,
-      x: 0,
-      y: Number(String(selectionIndex).split("-")[0]) || 0,
-      depth,
-      children,
-    };
-  }
 
-  function selectionFromRootNotes(rootNotes) {
-    const treeRoots = rootNotes.map(function (note, index) {
-      return buildNoteTree(note, index, 0);
+    const childIdsByParent = {};
+    const referencedChildIds = {};
+    const parentByChildId = {};
+    orderedIds.forEach(function (noteId) {
+      const uniqueChildIds = {};
+      childIdsByParent[noteId] = arrayFromNSArray(notesById[noteId].childNotes).map(function (childNote) {
+        const childId = String(childNote && childNote.noteId || "");
+        if (!childId) throw new Error("学习集子卡片缺少noteId: parent=" + noteId);
+        if (!notesById[childId]) throw new Error("学习集子卡片不在卡片集合中: " + childId);
+        if (uniqueChildIds[childId]) return null;
+        if (parentByChildId[childId] && parentByChildId[childId] !== noteId) {
+          throw new Error("学习集卡片存在多个上级: " + childId);
+        }
+        uniqueChildIds[childId] = true;
+        parentByChildId[childId] = noteId;
+        referencedChildIds[childId] = true;
+        return childId;
+      }).filter(Boolean);
+    });
+
+    const visitState = {};
+    function buildTree(noteId, selectionIndex, depth) {
+      if (visitState[noteId] === 1) throw new Error("学习集卡片层级存在循环: " + noteId);
+      if (visitState[noteId] === 2) return null;
+      visitState[noteId] = 1;
+      const children = childIdsByParent[noteId].map(function (childId, childIndex) {
+        return buildTree(childId, selectionIndex + "-" + childIndex, depth + 1);
+      }).filter(Boolean);
+      visitState[noteId] = 2;
+      return {
+        note: notesById[noteId], noteId, selectionIndex,
+        x: 0, y: Number(String(selectionIndex).split("-")[0]) || 0, depth, children,
+      };
+    }
+
+    const rootIds = orderedIds.filter(function (noteId) { return !referencedChildIds[noteId]; });
+    if (orderedIds.length > 0 && rootIds.length === 0) {
+      buildTree(orderedIds[0], 0, 0);
+      throw new Error("学习集卡片层级不存在根节点");
+    }
+    const treeRoots = rootIds.map(function (noteId, index) { return buildTree(noteId, index, 0); }).filter(Boolean);
+    orderedIds.forEach(function (noteId, index) {
+      if (!visitState[noteId]) {
+        const extraRoot = buildTree(noteId, treeRoots.length + index, 0);
+        if (extraRoot) treeRoots.push(extraRoot);
+      }
     });
     const treeCards = flattenTreeNodes(treeRoots);
     const flatCards = treeCards.map(function (card, index) {
