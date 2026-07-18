@@ -7,7 +7,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeft, Check, ChevronRight, FileDown, FileText, Folder, Hash, Import as ImportIcon, Link2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, FileText, Folder, Hash, Link2, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal } from "lucide-react";
 import { useVaultBrowser } from "../hooks/useVaultBrowser";
 import { useDocumentImport } from "../hooks/useDocumentImport";
 import { usePdfDocumentImport } from "../hooks/usePdfDocumentImport";
@@ -351,7 +351,21 @@ function VaultBrowser({ connection, setNotice }) {
         {sidebarCollapsed && <button className="icon-button sidebar-expand" onClick={() => setSidebarCollapsed(false)} title="展开文件栏" type="button"><PanelLeftOpen size={16} /></button>}
         <Preview document={browser.document} markdown={browser.previewMarkdown} html={browser.previewHtml} assetUrls={browser.assetUrls} onOpen={browser.openDocument} onBack={() => browser.setDocument(null)} contentRef={previewContentRef} />
       </div>
-      {browser.document && <footer className="insert-bar"><div className="insert-target"><small>目标</small><strong>{importTarget}</strong></div><div className="insert-actions">{hasCurrentCard && <button className="secondary" disabled={importBusy} onClick={() => handleImport("append", createMode)} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "appending" ? "追加中" : "追加到当前卡片"}</button>}<button disabled={importBusy} onClick={() => handleImport("create", createMode)} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "creating" ? "创建中" : "创建卡片"}</button><button aria-label="选择导入方式" className="secondary import-mode-button" disabled={importBusy} onClick={toggleCreateMenu} ref={createMenuButtonRef} title={createMode === "markdown" ? "灵活" : "只读"} type="button"><ImportIcon size={16} /></button><span className="pdf-import-group"><i aria-hidden="true" /><button aria-label="导入为文档" className="secondary pdf-import-button" disabled={importBusy} onClick={handlePdfImport} title="导入为文档" type="button">{pdfBusy ? <LoaderCircle className="spin" size={16} /> : <FileDown size={16} />}</button></span></div></footer>}
+      {browser.document && (
+        <footer className="insert-bar">
+          <div className="insert-target"><small>导入到</small><strong>{importTarget}</strong></div>
+          <div className="insert-actions">
+            <div className="card-import-actions">
+              {hasCurrentCard && <button className="secondary append-action" disabled={importBusy} onClick={() => handleImport("append", createMode)} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "appending" ? "追加中" : "追加到当前卡片"}</button>}
+              <button className="create-card-action" disabled={importBusy} onClick={() => handleImport("create", createMode)} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "creating" ? "创建中" : "创建卡片"}</button>
+              <button aria-label="选择导入方式" className="import-mode-button" disabled={importBusy} onClick={toggleCreateMenu} ref={createMenuButtonRef} title={`导入方式 · ${createMode === "markdown" ? "灵活" : "只读"}`} type="button"><SlidersHorizontal size={16} /></button>
+            </div>
+            <div className="document-import-actions">
+              <button className="pdf-import-button" disabled={importBusy} onClick={handlePdfImport} type="button">{pdfBusy ? "处理中" : "导入文档"}</button>
+            </div>
+          </div>
+        </footer>
+      )}
       {createMenu && createPortal(<div className="create-mode-menu" style={{ right: createMenu.right, bottom: createMenu.bottom }}><button onClick={() => { setCreateMode("markdown"); setCreateMenu(null); }} type="button"><span>{createMode === "markdown" && <Check size={14} />}</span>灵活</button><button onClick={() => { setCreateMode("html"); setCreateMenu(null); }} type="button"><span>{createMode === "html" && <Check size={14} />}</span>只读</button></div>, document.body)}
     </div>
   );

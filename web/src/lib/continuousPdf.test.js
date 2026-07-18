@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { calculateCaptureBandHeight, calculatePdfPages } from "./continuousPdf";
+import { calculateCaptureBandHeight, calculatePdfPages, normalizeCanvasText } from "./continuousPdf";
 
 describe("continuous PDF layout", () => {
   test("keeps a normal document on one continuous page", () => {
@@ -20,5 +20,16 @@ describe("continuous PDF layout", () => {
     const height = calculateCaptureBandHeight(1200, 2);
     expect(1200 * height * 4).toBeLessThanOrEqual(16_000_000);
     expect(height * 2).toBeLessThanOrEqual(16_384);
+  });
+
+  test("normalizes justified text only in the PDF capture clone", () => {
+    const root = document.createElement("div");
+    root.innerHTML = '<h1 style="text-align: justify; letter-spacing: 8px; word-spacing: 12px">标题</h1><p style="text-align: center">正文</p>';
+    normalizeCanvasText(root);
+    const heading = root.querySelector("h1");
+    expect(heading.style.textAlign).toBe("left");
+    expect(heading.style.letterSpacing).toBe("normal");
+    expect(heading.style.wordSpacing).toBe("normal");
+    expect(root.querySelector("p").style.textAlign).toBe("center");
   });
 });

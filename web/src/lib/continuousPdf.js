@@ -57,6 +57,22 @@ function canvasToPngBytes(canvas) {
   });
 }
 
+function nextAnimationFrame() {
+  return new Promise(resolve => window.requestAnimationFrame(resolve));
+}
+
+function normalizeCanvasText(root) {
+  const elements = [root, ...root.querySelectorAll("*")];
+  for (const element of elements) {
+    if (element.style?.textAlign === "justify") {
+      element.style.textAlign = "left";
+      element.style.textJustify = "auto";
+      element.style.letterSpacing = "normal";
+      element.style.wordSpacing = "normal";
+    }
+  }
+}
+
 async function createCaptureSurface(sourceElement) {
   if (!sourceElement) throw new Error("PDF预览正文不存在");
   const width = Math.round(sourceElement.clientWidth);
@@ -70,10 +86,13 @@ async function createCaptureSurface(sourceElement) {
   content.classList.add("ostracon-pdf-content");
   content.style.width = "100%";
   content.style.maxWidth = "100%";
+  normalizeCanvasText(content);
   viewport.append(style, content);
   document.body.appendChild(viewport);
   if (document.fonts?.ready) await document.fonts.ready;
   await Promise.all(Array.from(content.querySelectorAll("img")).map(waitForImage));
+  await nextAnimationFrame();
+  await nextAnimationFrame();
   const height = Math.ceil(content.scrollHeight);
   if (height <= 0) { viewport.remove(); throw new Error("PDF预览正文高度无效"); }
   return { viewport, content, width, height };
@@ -93,6 +112,7 @@ async function renderContinuousPdf(sourceElement, onProgress = () => {}) {
       for (const band of pagePlan.bands) {
         surface.viewport.style.height = `${band.height}px`;
         surface.content.style.transform = `translateY(${-band.sourceY}px)`;
+        await nextAnimationFrame();
         const canvas = await html2canvas(surface.viewport, {
           backgroundColor: "#ffffff",
           width: surface.width,
@@ -123,4 +143,4 @@ async function renderContinuousPdf(sourceElement, onProgress = () => {}) {
   }
 }
 
-export { calculateCaptureBandHeight, calculatePdfPages, renderContinuousPdf };
+export { calculateCaptureBandHeight, calculatePdfPages, normalizeCanvasText, renderContinuousPdf };
