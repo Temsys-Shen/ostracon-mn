@@ -56,6 +56,10 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     appendObsidianImportChunk: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.appendChunk,
     finalizeObsidianImport: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.finalize,
     abortObsidianImport: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.abort,
+    createObsidianPdfImportSession: __MN_OBSIDIAN_PDF_IMPORT_SERVICE_MNOstraconAddon.createSession,
+    appendObsidianPdfImportChunk: __MN_OBSIDIAN_PDF_IMPORT_SERVICE_MNOstraconAddon.appendChunk,
+    finalizeObsidianPdfImport: __MN_OBSIDIAN_PDF_IMPORT_SERVICE_MNOstraconAddon.finalize,
+    abortObsidianPdfImport: __MN_OBSIDIAN_PDF_IMPORT_SERVICE_MNOstraconAddon.abort,
   };
 
   return { commands };

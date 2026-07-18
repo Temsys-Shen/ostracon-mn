@@ -1,4 +1,5 @@
 import React, { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -6,9 +7,10 @@ import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeft, ChevronRight, FileText, Folder, Hash, Link2, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, FileDown, FileText, Folder, Hash, Import as ImportIcon, Link2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { useVaultBrowser } from "../hooks/useVaultBrowser";
 import { useDocumentImport } from "../hooks/useDocumentImport";
+import { usePdfDocumentImport } from "../hooks/usePdfDocumentImport";
 
 function DocumentList({ items, onOpen, scrollRef }) {
   const listRef = useRef(null);
@@ -133,7 +135,64 @@ export const MarkdownBody = memo(function MarkdownBody({ markdown, assetUrls, on
   return <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS} rehypePlugins={HTML_PLUGINS} urlTransform={url => url} components={components}>{normalizedMarkdown}</ReactMarkdown>;
 });
 
-function Preview({ document, markdown, assetUrls, onOpen, onBack }) {
+const OBSIDIAN_HTML_STYLES = `
+:host{display:block;width:100%;max-width:100%;min-width:0;color:var(--ink);font:13px/1.65 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif}
+.obsidian-html-body{display:block;width:100%;max-width:100%;min-width:0;overflow-wrap:anywhere;word-break:break-word}
+*{box-sizing:border-box;max-width:100%}a{color:#315fc7;text-decoration:none;overflow-wrap:anywhere}a:hover{text-decoration:underline}
+h1{font-size:20px}h2{font-size:17px}h3{font-size:15px}h1,h2,h3,h4,h5,h6{margin:1.2em 0 .45em;line-height:1.3}
+p{max-width:72ch}img{max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important}svg{max-width:100%}pre{position:relative;max-width:100%;overflow:auto;padding:12px 14px;border:1px solid #d8dde6;border-radius:5px;background:#f5f7fa;white-space:pre-wrap}
+code{font:11px/1.6 "SF Mono",Menlo,monospace}.copy-code-button{all:unset;position:absolute;top:6px;right:6px;display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;border:1px solid #d2d7df;border-radius:4px;background:#fff;color:#596273;cursor:pointer;opacity:0;transition:opacity 150ms ease-out,background-color 150ms ease-out}.copy-code-button:hover{background:#eef1f6}.copy-code-button:focus-visible{outline:2px solid #315fc7;outline-offset:2px}.copy-code-button svg{display:block;width:14px!important;height:14px!important;max-width:none}.copy-code-button svg *{stroke-width:2}pre:hover .copy-code-button,.copy-code-button:focus-visible{opacity:1}
+.token.comment,.token.prolog,.token.doctype,.token.cdata{color:#77808f;font-style:italic}.token.punctuation{color:#596273}.token.namespace{opacity:.75}.token.property,.token.tag,.token.constant,.token.symbol,.token.deleted{color:#b42318}.token.boolean,.token.number{color:#9a4d00}.token.selector,.token.attr-name,.token.string,.token.char,.token.builtin,.token.inserted{color:#177245}.token.operator,.token.entity,.token.url,.language-css .token.string,.style .token.string{color:#7a3e9d}.token.atrule,.token.attr-value,.token.keyword{color:#315fc7}.token.function,.token.class-name{color:#7b45a8}.token.regex,.token.important,.token.variable{color:#a15c00}.token.important,.token.bold{font-weight:700}.token.italic{font-style:italic}
+table{width:100%;border-collapse:collapse}th,td{padding:5px 7px;border:1px solid #d8dde6}
+blockquote{margin:10px 0;padding:2px 12px;border-left:2px solid #9aa4b2;color:#687385}.callout{margin:12px 0;padding:10px 12px;border:1px solid #d8dde6;border-radius:6px;background:#f7f8fb}
+.callout-title{display:flex;align-items:center;gap:6px;font-weight:650}.callout-icon svg{width:16px;height:16px}.internal-embed{display:block;margin:12px 0;padding:10px;border:1px solid #d8dde6;border-radius:6px}
+.link-bookmark,.bookmark-card,.block-language-link-bookmark>div{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:12px;margin:12px 0;padding:12px;border:1px solid #d8dde6;border-radius:6px;background:#fff;overflow:hidden}
+.link-bookmark img,.bookmark-card img,.block-language-link-bookmark img{border-radius:4px}.katex-display{max-width:100%;overflow:auto}
+.ta-bookmark{display:flex;box-sizing:border-box;width:100%;margin:12px 0;overflow:hidden;border:1px solid #d8dde6;border-radius:5px;background:#fff;cursor:pointer}.ta-bookmark:hover{border-color:#9aa8bb}.ta-bookmark-content{min-width:0;flex:2;padding:14px}.ta-bookmark-title{min-height:24px;margin-bottom:2px;overflow:hidden;color:#252a33;font-size:14px;line-height:20px;white-space:nowrap;text-overflow:ellipsis}.ta-bookmark-description{height:32px;overflow:hidden;color:#687385;font-size:11px;line-height:16px}.ta-bookmark-url{display:flex;align-items:center;margin-top:6px}.ta-bookmark-url-logo{width:16px;height:16px;margin-right:6px;flex:0 0 16px;background-repeat:no-repeat;background-position:center;background-size:contain}.ta-bookmark-url-text{overflow:hidden;color:#394150;font-size:11px;white-space:nowrap;text-overflow:ellipsis}.ta-bookmark-cover{min-width:112px;min-height:96px;flex:1;background-repeat:no-repeat;background-position:center;background-size:cover}@media(max-width:480px){.ta-bookmark{flex-direction:column-reverse}.ta-bookmark-cover{width:100%;min-height:128px;flex:none}.ta-bookmark-title{white-space:normal}.ta-bookmark-description{height:auto;max-height:48px}}
+`;
+
+export const ObsidianHtmlBody = memo(function ObsidianHtmlBody({ html, assetUrls, onOpen, contentRef }) {
+  const hostRef = useRef(null);
+  const hydratedHtml = useMemo(() => {
+    let value = html || "";
+    for (const path of Object.keys(assetUrls)) value = value.split(`ostracon-asset://${encodeURIComponent(path)}`).join(assetUrls[path]);
+    return value;
+  }, [html, assetUrls]);
+  useEffect(() => {
+    const host = hostRef.current;
+    const root = host.shadowRoot || host.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>${OBSIDIAN_HTML_STYLES}</style><div class="obsidian-html-body">${hydratedHtml}</div>`;
+    if (contentRef) contentRef.current = root.querySelector(".obsidian-html-body");
+    const handleClick = event => {
+      const anchor = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+      const internalPath = anchor?.dataset?.href;
+      if (internalPath) {
+        event.preventDefault();
+        onOpen(internalPath);
+        return;
+      }
+      const bookmark = event.composedPath().find(node => node instanceof HTMLElement && node.classList.contains("ta-bookmark"));
+      const bookmarkUrl = bookmark?.querySelector(".ta-bookmark-url-text")?.textContent?.trim();
+      if (bookmarkUrl) window.open(bookmarkUrl, "_blank");
+    };
+    root.addEventListener("click", handleClick);
+    return () => {
+      root.removeEventListener("click", handleClick);
+      if (contentRef) contentRef.current = null;
+    };
+  }, [contentRef, hydratedHtml, onOpen]);
+  return <div className="obsidian-html-host" ref={hostRef} />;
+});
+
+export function measureHtmlContent(element) {
+  if (!element) throw new Error("HTML预览正文不存在");
+  const width = Math.round(element.clientWidth);
+  const height = Math.max(120, Math.round(element.scrollHeight));
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) throw new Error("HTML预览尺寸无效");
+  return { width, height };
+}
+
+function Preview({ document, markdown, html, assetUrls, onOpen, onBack, contentRef }) {
   const [tab, setTab] = useState("body");
   const [visibleCharacters, setVisibleCharacters] = useState(PREVIEW_CHUNK_SIZE);
   const deferredMarkdown = useDeferredValue(markdown);
@@ -151,8 +210,8 @@ function Preview({ document, markdown, assetUrls, onOpen, onBack }) {
       <div className="preview-tags">{(document.tags || []).map(tag => <span key={tag}>{tag}</span>)}</div>
       {tab === "body" ? (
         <article className="markdown-preview">
-          <MarkdownBody markdown={visibleMarkdown} assetUrls={assetUrls} onOpen={onOpen} />
-          {hasMore && <button className="preview-more" onClick={() => setVisibleCharacters(value => value + PREVIEW_CHUNK_SIZE)} type="button">继续加载</button>}
+          {html ? <ObsidianHtmlBody html={html} assetUrls={assetUrls} onOpen={onOpen} contentRef={contentRef} /> : <MarkdownBody markdown={visibleMarkdown} assetUrls={assetUrls} onOpen={onOpen} />}
+          {!html && hasMore && <button className="preview-more" onClick={() => setVisibleCharacters(value => value + PREVIEW_CHUNK_SIZE)} type="button">继续加载</button>}
         </article>
       ) : (
         <div className="relation-list">
@@ -168,12 +227,17 @@ function Preview({ document, markdown, assetUrls, onOpen, onBack }) {
 function VaultBrowser({ connection, setNotice }) {
   const browser = useVaultBrowser(connection);
   const importer = useDocumentImport();
+  const pdfImporter = usePdfDocumentImport();
   const bodyRef = useRef(null);
+  const previewContentRef = useRef(null);
+  const createMenuButtonRef = useRef(null);
   const listPaneRef = useRef(null);
   const [mode, setMode] = useState("files");
   const [searchText, setSearchText] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [createMode, setCreateMode] = useState("markdown");
+  const [createMenu, setCreateMenu] = useState(null);
 
   useEffect(() => {
     importer.refreshContext().catch(error => console.log("insert context failed", error));
@@ -191,6 +255,12 @@ function VaultBrowser({ connection, setNotice }) {
     if (message) setNotice(message);
   }, [browser.error, importer.contextError, importer.error, setNotice]);
 
+  useEffect(() => {
+    if (pdfImporter.status === "generating") setNotice("正在生成PDF");
+    if (pdfImporter.status === "uploading") setNotice("正在传输PDF");
+    if (pdfImporter.status === "importing") setNotice("正在导入PDF");
+  }, [pdfImporter.status, setNotice]);
+
   const goParent = () => {
     const parts = browser.folderPath.split("/").filter(Boolean);
     parts.pop(); browser.loadFolder(parts.join("/"));
@@ -207,14 +277,34 @@ function VaultBrowser({ connection, setNotice }) {
       ? goParent
       : null;
   const showDocuments = Boolean(searchText || mode === "files" || browser.selectedTag);
-  const importBusy = importer.status === "uploading" || importer.status === "appending" || importer.status === "creating";
+  const pdfBusy = pdfImporter.status !== "idle";
+  const importBusy = pdfBusy || importer.status === "uploading" || importer.status === "appending" || importer.status === "creating";
   const hasCurrentCard = importer.context?.selectedCount === 1;
   const importTarget = hasCurrentCard ? importer.context.targetTitle : "学习集根部";
 
-  const handleImport = async (operation) => {
+  const handleImport = async (operation, contentMode = "markdown") => {
     try {
-      await importer.insert(browser.document, browser.insertMarkdown, operation);
+      const htmlSize = contentMode === "html" ? measureHtmlContent(previewContentRef.current) : null;
+      await importer.insert(browser.document, {
+        contentMode, markdown: browser.insertMarkdown, html: browser.insertHtml,
+        plainText: browser.plainText, htmlSize,
+      }, operation);
       setNotice(operation === "append" ? "已追加到当前卡片" : "已创建到学习集");
+    } catch (error) {
+      setNotice(error.message || String(error));
+    }
+  };
+
+  const toggleCreateMenu = () => {
+    if (createMenu) { setCreateMenu(null); return; }
+    const rect = createMenuButtonRef.current.getBoundingClientRect();
+    setCreateMenu({ right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.top + 6 });
+  };
+
+  const handlePdfImport = async () => {
+    try {
+      await pdfImporter.importDocument({ element: previewContentRef.current, title: browser.document?.title });
+      setNotice("PDF已导入当前学习集");
     } catch (error) {
       setNotice(error.message || String(error));
     }
@@ -259,9 +349,10 @@ function VaultBrowser({ connection, setNotice }) {
         </aside>
         <div className="sidebar-resizer" onPointerDown={startSidebarResize} role="separator" aria-label="调整文件栏宽度" aria-orientation="vertical" />
         {sidebarCollapsed && <button className="icon-button sidebar-expand" onClick={() => setSidebarCollapsed(false)} title="展开文件栏" type="button"><PanelLeftOpen size={16} /></button>}
-        <Preview document={browser.document} markdown={browser.previewMarkdown} assetUrls={browser.assetUrls} onOpen={browser.openDocument} onBack={() => browser.setDocument(null)} />
+        <Preview document={browser.document} markdown={browser.previewMarkdown} html={browser.previewHtml} assetUrls={browser.assetUrls} onOpen={browser.openDocument} onBack={() => browser.setDocument(null)} contentRef={previewContentRef} />
       </div>
-      {browser.document && <footer className="insert-bar"><div className="insert-target"><small>目标</small><strong>{importTarget}</strong></div><div className="insert-actions">{hasCurrentCard && <button className="secondary" disabled={importBusy} onClick={() => handleImport("append")} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "appending" ? "追加中" : "追加到当前卡片"}</button>}<button disabled={importBusy} onClick={() => handleImport("create")} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "creating" ? "创建中" : "创建卡片"}</button></div></footer>}
+      {browser.document && <footer className="insert-bar"><div className="insert-target"><small>目标</small><strong>{importTarget}</strong></div><div className="insert-actions">{hasCurrentCard && <button className="secondary" disabled={importBusy} onClick={() => handleImport("append", createMode)} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "appending" ? "追加中" : "追加到当前卡片"}</button>}<button disabled={importBusy} onClick={() => handleImport("create", createMode)} type="button">{importer.status === "uploading" ? "传输中" : importer.status === "creating" ? "创建中" : "创建卡片"}</button><button aria-label="选择导入方式" className="secondary import-mode-button" disabled={importBusy} onClick={toggleCreateMenu} ref={createMenuButtonRef} title={createMode === "markdown" ? "灵活" : "只读"} type="button"><ImportIcon size={16} /></button><span className="pdf-import-group"><i aria-hidden="true" /><button aria-label="导入为文档" className="secondary pdf-import-button" disabled={importBusy} onClick={handlePdfImport} title="导入为文档" type="button">{pdfBusy ? <LoaderCircle className="spin" size={16} /> : <FileDown size={16} />}</button></span></div></footer>}
+      {createMenu && createPortal(<div className="create-mode-menu" style={{ right: createMenu.right, bottom: createMenu.bottom }}><button onClick={() => { setCreateMode("markdown"); setCreateMenu(null); }} type="button"><span>{createMode === "markdown" && <Check size={14} />}</span>灵活</button><button onClick={() => { setCreateMode("html"); setCreateMenu(null); }} type="button"><span>{createMode === "html" && <Check size={14} />}</span>只读</button></div>, document.body)}
     </div>
   );
 }

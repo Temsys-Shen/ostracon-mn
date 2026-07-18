@@ -5,12 +5,18 @@ function utf8Base64(value) {
   return window.btoa(unescape(encodeURIComponent(value)));
 }
 
-function buildImportPayload(document, markdown, operation) {
+function buildImportPayload(document, content, operation) {
   if (operation !== "create" && operation !== "append") throw new Error(`不支持的导入操作: ${operation}`);
+  const contentMode = content.contentMode;
+  if (contentMode !== "markdown" && contentMode !== "html") throw new Error(`不支持的卡片内容模式: ${contentMode}`);
   return {
     operation,
+    contentMode,
     title: document.title,
-    markdown,
+    markdown: content.markdown,
+    html: contentMode === "html" ? content.html : "",
+    plainText: contentMode === "html" ? content.plainText : "",
+    htmlSize: contentMode === "html" ? content.htmlSize : null,
     sourcePath: document.path,
     mtime: document.mtime,
   };
@@ -34,12 +40,12 @@ function useDocumentImport() {
     }
   }, []);
 
-  const insert = useCallback(async (document, markdown, operation) => {
-    if (!document || !markdown) return;
+  const insert = useCallback(async (document, content, operation) => {
+    if (!document || !content?.markdown) return;
     setStatus("uploading"); setError(""); setResult(null);
     let sessionId = "";
     try {
-      const json = JSON.stringify(buildImportPayload(document, markdown, operation));
+      const json = JSON.stringify(buildImportPayload(document, content, operation));
       const base64 = utf8Base64(json);
       const expectedByteLength = Math.floor(base64.length * 3 / 4) - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
       const session = await MNBridge.send("createObsidianImportSession", { expectedByteLength }, 10000);

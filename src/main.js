@@ -10,6 +10,7 @@ JSB.require("BridgeCommandsPersistence");
 JSB.require("BridgeCommandsInfo");
 JSB.require("BridgeCommandsContent");
 JSB.require("ObsidianCardImportService");
+JSB.require("ObsidianPdfImportService");
 JSB.require("WebBridgeCommands");
 JSB.require("FrameManager");
 JSB.require("BridgeDispatcher");

@@ -5,9 +5,35 @@ import rehypeKatex from "rehype-katex";
 import remarkBreaks from "remark-breaks";
 import remarkMath from "remark-math";
 import { describe, expect, test, vi } from "vitest";
-import { MarkdownBody, normalizeDisplayMathFences } from "./VaultBrowser";
+import { MarkdownBody, measureHtmlContent, ObsidianHtmlBody, normalizeDisplayMathFences } from "./VaultBrowser";
 
 describe("Markdown preview line breaks", () => {
+  test("renders Obsidian HTML inside a shadow root and rewrites vault assets", () => {
+    const contentRef = { current: null };
+    const { container } = render(<ObsidianHtmlBody html={'<div class="ta-bookmark"><div class="ta-bookmark-content"><div class="ta-bookmark-url-text">https://example.com</div><img src="ostracon-asset://Assets%2Fcover.png"></div><a data-href="Other.md">书签</a></div>'} assetUrls={{ "Assets/cover.png": "data:image/png;base64,YQ==" }} onOpen={vi.fn()} contentRef={contentRef} />);
+    const shadow = container.querySelector(".obsidian-html-host").shadowRoot;
+    expect(shadow.querySelector(".ta-bookmark")).not.toBeNull();
+    expect(shadow.querySelector("img").src).toBe("data:image/png;base64,YQ==");
+    expect(shadow.querySelector("style").textContent).toContain(".copy-code-button");
+    expect(shadow.querySelector("style").textContent).toContain(".token.keyword");
+    expect(shadow.querySelector("style").textContent).toContain(".ta-bookmark-cover");
+    expect(shadow.querySelector("style").textContent).toContain("flex-direction:column-reverse");
+    expect(shadow.querySelector("style").textContent).toContain("width:100%;max-width:100%");
+    expect(shadow.querySelector("style").textContent).toContain("img{max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important}");
+    expect(shadow.querySelector("style").textContent).not.toContain("height:76px;object-fit:cover");
+    expect(contentRef.current).toBe(shadow.querySelector(".obsidian-html-body"));
+  });
+  test("opens a Typing Assistant bookmark URL", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { container } = render(<ObsidianHtmlBody html={'<div class="ta-bookmark"><div class="ta-bookmark-url-text">https://example.com/page</div></div>'} assetUrls={{}} onOpen={vi.fn()} />);
+    fireEvent.click(container.querySelector(".obsidian-html-host").shadowRoot.querySelector(".ta-bookmark"));
+    expect(open).toHaveBeenCalledWith("https://example.com/page", "_blank");
+    open.mockRestore();
+  });
+  test("measures the responsive HTML body for readonly imports", () => {
+    expect(measureHtmlContent({ clientWidth: 638.4, scrollHeight: 912.6 })).toEqual({ width: 638, height: 913 });
+    expect(() => measureHtmlContent({ clientWidth: 0, scrollHeight: 400 })).toThrow("HTML预览尺寸无效");
+  });
   test("renders a soft line ending as a visible break", () => {
     const { container } = render(
       <ReactMarkdown remarkPlugins={[remarkBreaks]}>{"first\nsecond"}</ReactMarkdown>,

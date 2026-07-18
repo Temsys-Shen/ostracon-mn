@@ -13,6 +13,9 @@ function useVaultBrowser(connection) {
   const [document, setDocument] = useState(null);
   const [previewMarkdown, setPreviewMarkdown] = useState("");
   const [insertMarkdown, setInsertMarkdown] = useState("");
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [insertHtml, setInsertHtml] = useState("");
+  const [plainText, setPlainText] = useState("");
   const [assetUrls, setAssetUrls] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -79,12 +82,17 @@ function useVaultBrowser(connection) {
       };
       await Promise.all(Array.from({ length: Math.min(3, assetItems.length) }, loadAsset));
       let fullMarkdown = detail.markdown || "";
+      let fullHtml = detail.renderedHtml || "";
       for (const pathValue of Object.keys(assets)) {
         fullMarkdown = fullMarkdown.split(`ostracon-asset://${encodeURIComponent(pathValue)}`).join(assets[pathValue]);
+        fullHtml = fullHtml.split(`ostracon-asset://${encodeURIComponent(pathValue)}`).join(assets[pathValue]);
       }
       setDocument(detail);
       setPreviewMarkdown(detail.markdown || "");
       setInsertMarkdown(fullMarkdown);
+      setPreviewHtml(detail.renderedHtml || "");
+      setInsertHtml(fullHtml);
+      setPlainText(detail.plainText || "");
       setAssetUrls(assets);
     } catch (e) { setError(e.message || String(e)); }
     finally { setLoading(false); }
@@ -103,7 +111,7 @@ function useVaultBrowser(connection) {
 
   const activeDocuments = useMemo(() => query.trim() ? searchResults : selectedTag ? tagDocuments : folder.documents || [], [query, searchResults, selectedTag, tagDocuments, folder.documents]);
 
-  return { state, folderPath, folder, tags, selectedTag, query, activeDocuments, document, previewMarkdown, insertMarkdown, assetUrls, loading, error, loadFolder, chooseTag, search, openDocument, setDocument };
+  return { state, folderPath, folder, tags, selectedTag, query, activeDocuments, document, previewMarkdown, insertMarkdown, previewHtml, insertHtml, plainText, assetUrls, loading, error, loadFolder, chooseTag, search, openDocument, setDocument };
 }
 
 export { useVaultBrowser };

@@ -103,11 +103,26 @@ var __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon = (function () {
       if (!text) throw new Error("导入内容为空");
       var document = JSON.parse(text);
       var operation = String(document.operation || "");
+      var contentMode = String(document.contentMode || "markdown");
       var title = String(document.title || "").trim();
       var markdown = String(document.markdown || "").trim();
       if (operation !== "create" && operation !== "append") throw new Error("不支持的Obsidian导入操作: " + operation);
+      if (contentMode !== "markdown" && contentMode !== "html") throw new Error("不支持的卡片内容模式: " + contentMode);
       if (!title) throw new Error("Obsidian文档缺少标题");
       if (!markdown) throw new Error("Obsidian文档正文为空");
+      var html = "";
+      var plainText = "";
+      var htmlSize = null;
+      if (contentMode === "html") {
+        html = String(document.html || "");
+        plainText = String(document.plainText || "").trim();
+        htmlSize = document.htmlSize;
+        if (!html) throw new Error("Obsidian文档缺少渲染HTML");
+        if (!plainText) throw new Error("Obsidian文档缺少HTML纯文本");
+        if (!htmlSize || !Number.isFinite(Number(htmlSize.width)) || Number(htmlSize.width) <= 0 || !Number.isFinite(Number(htmlSize.height)) || Number(htmlSize.height) <= 0) {
+          throw new Error("Obsidian文档HTML尺寸无效");
+        }
+      }
 
       var target = insertContext(context);
       if (operation === "append" && (!target.parent || target.selectedCount !== 1)) {
@@ -124,14 +139,19 @@ var __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon = (function () {
         } else {
           targetNote = target.parent;
         }
-        targetNote.appendMarkdownComment(markdown + sourceMarker);
-        targetNote.processMarkdownBase64Images();
+        if (contentMode === "html") {
+          targetNote.appendHtmlComment(html + sourceMarker, plainText, { width: Number(htmlSize.width), height: Number(htmlSize.height) }, "ostracon-ob");
+        } else {
+          targetNote.appendMarkdownComment(markdown + sourceMarker);
+          targetNote.processMarkdownBase64Images();
+        }
       });
       Application.sharedInstance().refreshAfterDBChanged(target.notebookId);
       target.controller.focusNoteInMindMapById(targetNote.noteId);
       return {
         ok: true,
         operation: operation,
+        contentMode: contentMode,
         noteId: String(targetNote.noteId || ""),
         title: title,
         targetKind: operation === "append" ? "existing" : target.targetKind,

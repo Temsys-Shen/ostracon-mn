@@ -73,6 +73,7 @@ body {
 
 .document-preview { display: flex; min-width: 0; min-height: 0; max-width: 100%; flex-direction: column; overflow: hidden; background: var(--surface); }
 .preview-header { display: flex; align-items: flex-start; gap: 7px; padding: 12px 14px 8px; }
+.browser-body.sidebar-collapsed .preview-header { padding-left: 52px; }
 .preview-title { min-width: 0; flex: 1; }
 .preview-header h2 { margin: 0; overflow: hidden; font-size: 16px; line-height: 1.35; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
 .preview-header p { margin: 3px 0 0; overflow: hidden; color: var(--subtle); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -82,6 +83,7 @@ body {
 .preview-tabs { flex: 0 0 auto; }
 .markdown-preview, .relation-list { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 4px 18px 24px; user-select: text; -webkit-user-select: text; }
 .markdown-preview { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.obsidian-html-host { display: block; min-width: 0; width: 100%; }
 .markdown-preview h1 { font-size: 20px; }.markdown-preview h2 { font-size: 17px; }.markdown-preview h3 { font-size: 15px; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 1.2em 0 .45em; letter-spacing: 0; text-wrap: balance; }
 .markdown-preview p { max-width: 72ch; text-wrap: pretty; }
@@ -104,14 +106,25 @@ body {
 .insert-target { min-width: 0; flex: 1; }.insert-target small, .insert-target strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.insert-target small { color: var(--subtle); font-size: 10px; }.insert-target strong { margin-top: 2px; font-size: 12px; }
 .insert-actions { display: flex; flex: 0 0 auto; gap: 7px; }
 .insert-actions button { height: 34px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: white; font-weight: 650; }.insert-actions button:hover:not(:disabled) { background: var(--accent-strong); }.insert-actions button.secondary { border-color: var(--line-strong); background: var(--surface); color: var(--ink); }.insert-actions button.secondary:hover:not(:disabled) { border-color: #9cbaf5; background: var(--accent-soft); color: var(--accent-strong); }.insert-actions button:disabled { opacity: .55; cursor: default; }
+.insert-actions button.import-mode-button { display: inline-flex; width: 34px; padding: 0; align-items: center; justify-content: center; }
+.pdf-import-group { display: inline-flex; align-items: center; gap: 8px; margin-left: 1px; }
+.pdf-import-group > i { width: 1px; height: 22px; background: var(--line-strong); }
+.insert-actions button.pdf-import-button { display: inline-flex; width: 34px; padding: 0; align-items: center; justify-content: center; }
+.pdf-import-button .spin { animation: pdf-spin 900ms linear infinite; }
+.create-mode-menu { position: fixed; z-index: 40; min-width: 112px; padding: 4px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); box-shadow: 0 4px 8px rgba(20,30,45,.16); }
+.create-mode-menu button { display: flex; width: 100%; height: 32px; align-items: center; gap: 6px; padding: 0 9px; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: left; }
+.create-mode-menu button:hover { background: var(--accent-soft); }
+.create-mode-menu button span { display: inline-flex; width: 14px; }
 .import-error { border-top: 1px solid #efb8b8; border-bottom: 0; }
 @keyframes skeleton { to { background-position: -200% 0; } }
+@keyframes pdf-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 700px) {
   .browser-toolbar { flex-wrap: wrap; }.search-box { flex-basis: 100%; order: 2; }
   .browser-body, .browser-body.sidebar-collapsed { display: block; position: relative; }.browser-list-pane, .document-preview { position: absolute; inset: 0; }
   .document-preview { display: none; }.vault-browser.has-preview .browser-list-pane { display: none; }.vault-browser.has-preview .document-preview { display: flex; }
   .preview-back { display: inline-flex; flex: 0 0 auto; }.browser-list-pane { visibility: visible; overflow: auto; border-right: 0; }.sidebar-resizer, .sidebar-collapse, .sidebar-expand { display: none; }
+  .browser-body.sidebar-collapsed .preview-header { padding-left: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0ms !important; animation-duration: 0ms !important; } }
 
