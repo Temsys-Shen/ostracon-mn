@@ -14,30 +14,50 @@ import { usePdfDocumentImport } from "../hooks/usePdfDocumentImport";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import useBridgeStore from "../store/useBridgeStore";
 
-function DocumentList({ items, onOpen, scrollRef }) {
+export const DOCUMENT_ROW_HEIGHT = 36;
+
+export function DocumentRow({ item, active, onOpen }) {
+  return (
+    <button
+      aria-current={active ? "page" : undefined}
+      aria-label={`${item.title}，${item.path}`}
+      className={`document-row${active ? " active" : ""}`}
+      onClick={() => onOpen(item.path)}
+      title={item.path}
+      type="button"
+    >
+      <FileText className="document-row-icon" size={14} />
+      <strong className="document-row-title">{item.title}</strong>
+      <ChevronRight className="document-row-arrow" size={13} />
+    </button>
+  );
+}
+
+function DocumentList({ items, activePath, onOpen, scrollRef }) {
   const listRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
+
   useLayoutEffect(() => {
     setScrollMargin(listRef.current?.offsetTop || 0);
   }, [items]);
+
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 44,
+    estimateSize: () => DOCUMENT_ROW_HEIGHT,
     overscan: 8,
     scrollMargin,
   });
+
   return (
     <div className="document-list" ref={listRef}>
       <div className="virtual-list" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map(row => {
           const item = items[row.index];
           return (
-            <button className="document-row" key={item.path} style={{ transform: `translateY(${row.start - scrollMargin}px)` }} onClick={() => onOpen(item.path)} type="button">
-              <FileText size={15} />
-              <span className="document-row-copy"><strong>{item.title}</strong><small>{item.path}</small></span>
-              <ChevronRight size={14} />
-            </button>
+            <div className="document-row-slot" key={item.path} style={{ transform: `translateY(${row.start - scrollMargin}px)` }}>
+              <DocumentRow active={item.path === activePath} item={item} onOpen={onOpen} />
+            </div>
           );
         })}
       </div>
@@ -345,12 +365,13 @@ function VaultBrowser({ connection, setNotice }) {
         <aside className="browser-list-pane" ref={listPaneRef}>
           <div className="folder-head">
             {sidebarBack && <button className="icon-button" onClick={sidebarBack} title="返回" type="button"><ArrowLeft size={15} /></button>}
-            <span>{sidebarTitle}</span>
+            <span className="folder-head-title">{sidebarTitle}</span>
+            {showDocuments && <small className="folder-head-count">{browser.activeDocuments.length}</small>}
             <button className="icon-button sidebar-collapse" onClick={() => setSidebarCollapsed(true)} title="折叠文件栏" type="button"><PanelLeftClose size={15} /></button>
           </div>
           {!searchText && mode === "files" && (browser.folder.folders || []).map(item => <button className="folder-row" key={item.path} onClick={() => browser.loadFolder(item.path)} type="button"><Folder size={15} /><span>{item.name}</span><ChevronRight size={14} /></button>)}
           {!searchText && mode === "tags" && !browser.selectedTag && <div className="tag-list">{browser.tags.map(tag => <button key={tag.name} onClick={() => browser.chooseTag(tag.name)} type="button"><span>{tag.name}</span><small>{tag.count}</small></button>)}</div>}
-          {showDocuments && (browser.loading && browser.activeDocuments.length === 0 ? <div className="browser-skeleton"><i /><i /><i /><i /></div> : <DocumentList items={browser.activeDocuments} onOpen={browser.openDocument} scrollRef={listPaneRef} />)}
+          {showDocuments && (browser.loading && browser.activeDocuments.length === 0 ? <div className="browser-skeleton"><i /><i /><i /><i /></div> : <DocumentList activePath={browser.document?.path} items={browser.activeDocuments} onOpen={browser.openDocument} scrollRef={listPaneRef} />)}
         </aside>
         <div className="sidebar-resizer" onPointerDown={startSidebarResize} role="separator" aria-label="调整文件栏宽度" aria-orientation="vertical" />
         {sidebarCollapsed && <button className="icon-button sidebar-expand" onClick={() => setSidebarCollapsed(false)} title="展开文件栏" type="button"><PanelLeftOpen size={16} /></button>}
