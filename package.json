@@ -28,9 +28,6 @@
     "vitest": "3.2.4",
     "zustand": "^5.0.12"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
-  },
   "mnRails": {
     "template": "web"
   },
