@@ -154,30 +154,21 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     var excerptPic = note.excerptPic;
     var hasExcerptPic = Boolean(excerptPic);
     var excerptMediaId = excerptPic ? normalizeText(excerptPic.paint) : "";
+    var textFirst = note.textFirst === true || Number(note.textFirst) === 1;
+    var excerptItems = [];
+    var excerptTexts = [];
 
-    if (hasExcerptPic) {
+    if (hasExcerptPic && !textFirst) {
       if (excerptMediaId) {
         var excerptImage = createImageItem(noteId, excerptMediaId, "png", "excerptPic", -1, "excerpt", false);
-        if (excerptImage) comments.push(excerptImage);
+        if (excerptImage) excerptItems.push(excerptImage);
       } else {
         console.log("[Ostracon] 媒体读取失败: noteId=" + noteId + ", source=excerptPic, commentIndex=-1, mediaId=");
       }
     }
 
-    var commentsToParse = rawComments.slice();
-    if (!hasExcerptPic && rawComments.length === 0) {
-      var excerptText = normalizeText(note.excerptText);
-      if (excerptText) {
-        commentsToParse.push({
-          type: "TextNote",
-          text: excerptText,
-          markdown: Number(note.excerptTextMarkdown) === 1,
-        });
-      }
-    }
-
-    for (var index = 0; index < commentsToParse.length; index++) {
-      var comment = commentsToParse[index];
+    for (var index = 0; index < rawComments.length; index++) {
+      var comment = rawComments[index];
       var type = comment ? String(comment.type || "") : "";
 
       if (type === "TextNote") {
@@ -193,12 +184,53 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
         continue;
       }
 
+      if (type === "LinkNote") {
+        var linkPicture = comment.q_hpic;
+        var linkMediaId = linkPicture ? normalizeText(linkPicture.paint) : "";
+        var linkTextFirst = comment.textFirst === true || Number(comment.textFirst) === 1;
+        if (linkMediaId && !linkTextFirst) {
+          comments.push(createImageItem(noteId, linkMediaId, "png", "linkNote", index, "linked excerpt", true));
+          continue;
+        }
+        var linkText = normalizeText(comment.q_htext);
+        if (linkText) {
+          var tokenizedLink = tokenizeTextComment(noteId, {
+            text: linkText,
+            markdown: comment.markdown === true || Number(comment.markdown) === 1,
+          }, index);
+          var parsedLink = tokenizedLink.buildItems(false);
+          comments = comments.concat(parsedLink.items);
+          if (parsedLink.commentText) commentTexts.push(parsedLink.commentText);
+        }
+        continue;
+      }
+
       if (type === "PaintNote") {
         var mediaId = normalizeText(comment.paint);
         if (!mediaId) throw new Error("PaintNote缺少paint: noteId=" + noteId + ", commentIndex=" + index);
         comments.push(createImageItem(noteId, mediaId, "png", "paintNote", index, "paint note", true));
       }
     }
+
+    if (!hasExcerptPic || textFirst) {
+      var excerptText = normalizeText(note.excerptText);
+      if (excerptText) {
+        var tokenizedExcerpt = tokenizeTextComment(noteId, {
+          text: excerptText,
+          markdown: Number(note.excerptTextMarkdown) === 1,
+        }, -1);
+        var consumeExcerptTitle = !title && Boolean(tokenizedExcerpt.title);
+        if (consumeExcerptTitle) {
+          title = tokenizedExcerpt.title;
+          titleSourceIndex = -1;
+        }
+        var parsedExcerpt = tokenizedExcerpt.buildItems(consumeExcerptTitle);
+        excerptItems = excerptItems.concat(parsedExcerpt.items);
+        if (parsedExcerpt.commentText) excerptTexts.push(parsedExcerpt.commentText);
+      }
+    }
+
+    comments = excerptItems.concat(comments);
 
     var notebookId = normalizeText(note.notebookId);
     if (notebookId && noteId !== "unknown") {
@@ -254,10 +286,10 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
       title: title || "无标题卡片",
       titleSourceIndex: titleSourceIndex,
       comments: comments,
-      commentText: commentTexts.join("\n\n"),
+      commentText: excerptTexts.concat(commentTexts).join("\n\n"),
       commentCount: rawComments.length,
       imageCount: imageComments.length,
-      hasImage: hasExcerptPic || imageComments.length > 0,
+      hasImage: imageComments.length > 0,
       hasHandwriting: handwritingComments.length > 0,
     };
   }

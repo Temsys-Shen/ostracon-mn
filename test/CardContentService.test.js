@@ -281,13 +281,14 @@ describe("CardContentService", () => {
     expect(sent.markdown).toContain("data:image/svg+xml;base64,");
   });
 
-  test("puts excerptPic before comments and does not use excerptText fallback", () => {
+  test("uses the image excerpt instead of OCR text when textFirst is disabled", () => {
     const context = createRuntime({ excerpt: "ZXhjZXJwdA==", paint: "cGFpbnQ=" });
     const note = {
       noteId: "excerpt-first",
       noteTitle: "显式标题",
       excerptPic: { paint: "excerpt" },
       excerptText: "不应出现",
+      textFirst: false,
       comments: [
         { type: "TextNote", text: "正文" },
         { type: "PaintNote", paint: "paint" },
@@ -313,26 +314,103 @@ describe("CardContentService", () => {
     expect(excerptOnly.commentText).toBe("");
   });
 
-  test("uses excerptText only when excerptPic and original comments are absent", () => {
+  test("keeps a text excerpt before comments when the card has no excerpt image", () => {
     const context = createRuntime();
     const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
       noteId: "excerpt-text",
+      noteTitle: "显式标题",
+      excerptText: "摘录正文",
+      excerptTextMarkdown: 1,
+      comments: [{ type: "TextNote", text: "后续评论" }],
+    });
+
+    expect(content.title).toBe("显式标题");
+    expect(content.commentText).toBe("摘录正文\n\n后续评论");
+    expect(content.comments).toEqual([
+      { type: "text", text: "摘录正文", markdown: true, index: -1 },
+      { type: "text", text: "后续评论", markdown: false, index: 0 },
+    ]);
+
+    const excerptTitle = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "excerpt-title",
       excerptText: "摘录标题\n## 摘录正文",
       excerptTextMarkdown: 1,
       comments: [],
     });
+    expect(excerptTitle.title).toBe("摘录标题");
+    expect(excerptTitle.commentText).toBe("## 摘录正文");
+  });
 
-    expect(content.title).toBe("摘录标题");
-    expect(content.commentText).toBe("## 摘录正文");
-    expect(content.comments).toEqual([{ type: "text", text: "## 摘录正文", markdown: true, index: 0 }]);
+  test("preserves LinkNote excerpts between the card excerpt and later comments", () => {
+    const context = createRuntime();
+    const note = {
+      noteId: "excerpt-with-comments",
+      noteTitle: "标题1",
+      excerptText: "文本1",
+      excerptTextMarkdown: true,
+      comments: [
+        {
+          type: "LinkNote",
+          q_htext: ".(2024N123B)HMG-CoA还原酶的别构抑制剂是A.乙酰CoAB.脂肪酰CoA",
+          noteid: "49F9D8C5-5CB8-4FCE-90C8-DEBBF4C7D76A",
+          markdown: false,
+        },
+        { type: "TextNote", text: "文本2", markdown: true },
+      ],
+    };
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {}).markdown;
+    const canvas = JSON.parse(context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {}).canvas);
 
-    const ignored = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
-      noteId: "excerpt-text-ignored",
-      excerptText: "不应补位",
-      comments: [{ type: "UnknownNote" }],
+    expect(content.title).toBe("标题1");
+    expect(content.commentText).toBe("文本1\n\n.(2024N123B)HMG-CoA还原酶的别构抑制剂是A.乙酰CoAB.脂肪酰CoA\n\n文本2");
+    expect(markdown.indexOf("文本1")).toBeLessThan(markdown.indexOf("文本2"));
+    expect(markdown).toContain("HMG-CoA还原酶");
+    expect(canvas.nodes[0].text.indexOf("文本1")).toBeLessThan(canvas.nodes[0].text.indexOf("文本2"));
+    expect(canvas.nodes[0].text).toContain("HMG-CoA还原酶");
+  });
+
+  test("uses OCR text instead of an excerpt image when textFirst is enabled", () => {
+    const context = createRuntime({ excerpt: "ZXhjZXJwdA==" });
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "ocr-excerpt",
+      noteTitle: "OCR卡片",
+      excerptPic: { paint: "excerpt" },
+      excerptText: "可搜索的OCR文本",
+      textFirst: true,
+      comments: [],
     });
-    expect(ignored.title).toBe("无标题卡片");
-    expect(ignored.commentText).toBe("");
+
+    expect(content.comments).toEqual([{ type: "text", text: "可搜索的OCR文本", markdown: false, index: -1 }]);
+    expect(content.commentText).toBe("可搜索的OCR文本");
+    expect(content.hasImage).toBe(false);
+  });
+
+  test("uses LinkNote images instead of OCR text when the LinkNote textFirst is disabled", () => {
+    const context = createRuntime({ "linked-image": "TElOS0VE" });
+    const note = {
+      noteId: "linked-image-note",
+      noteTitle: "图片摘录",
+      comments: [{
+        type: "LinkNote",
+        noteid: "26647D2E-197A-452B-B07E-6D4285C42926",
+        q_hpic: { paint: "linked-image" },
+        q_htext: "不应导出的OCR文字",
+        textFirst: false,
+        markdown: false,
+      }],
+    };
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {}).markdown;
+    const canvas = JSON.parse(context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {}).canvas);
+
+    expect(content.comments.map(item => item.source || item.type)).toEqual(["linkNote"]);
+    expect(content.commentText).toBe("");
+    expect(content.hasImage).toBe(true);
+    expect(markdown).toContain("data:image/png;base64,TElOS0VE");
+    expect(markdown).not.toContain("不应导出的OCR文字");
+    expect(canvas.nodes[0].text).toContain("data:image/png;base64,TElOS0VE");
+    expect(canvas.nodes[0].text).not.toContain("不应导出的OCR文字");
   });
 
   test("converts PNG and JPEG markdown images in place without deduplication", () => {
