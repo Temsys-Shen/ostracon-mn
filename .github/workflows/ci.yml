@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: corepack enable
       - run: pnpm --version
       - run: pnpm install
       - run: pnpm run build
