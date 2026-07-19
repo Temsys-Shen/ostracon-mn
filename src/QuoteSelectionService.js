@@ -1,5 +1,8 @@
 var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
+  // 事件名常量。与 web/src/lib/events.js 保持一致（人工同步，src/ 端不是 ES module 无法 import）。
   const SELECTION_NOTIFICATION = "SelectionChanged";
+  const EVT_SELECTION_CHANGED = "ostracon:selection-changed";
+  const EVT_QUOTE_ROOT_CLEARED = "ostracon:quote-root-cleared";
 
   function studyController(context) {
     const targetWindow = context.addon && context.addon.window
@@ -133,12 +136,12 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
   }
 
   function handleSelectionChanged(context) {
-    pushWebEvent(context, "ostracon:selection-changed");
+    pushWebEvent(context, EVT_SELECTION_CHANGED);
   }
 
   function handleNotebookClose(context) {
     context._ostraconQuoteRoot = null;
-    pushWebEvent(context, "ostracon:quote-root-cleared");
+    pushWebEvent(context, EVT_QUOTE_ROOT_CLEARED);
   }
 
   return {

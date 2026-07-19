@@ -4,8 +4,9 @@ import useBridgeStore from "./store/useBridgeStore";
 import { useConnection, useDiscovery, parseConnectionUrl } from "./hooks/useConnection";
 import { formatWsUrl } from "./hooks/useConnection";
 import { usePreferences } from "./hooks/usePreferences";
-import { useSelectionPolling } from "./hooks/useSelectionPolling";
+import { useSelectionWatcher } from "./hooks/useSelectionWatcher";
 import { useSend } from "./hooks/useSend";
+import { normalizeError } from "./lib/errors";
 import { isSendDisabled } from "./lib/sendRules";
 import VaultBrowser from "./components/VaultBrowser";
 import QuotePanel from "./components/QuotePanel";
@@ -18,11 +19,6 @@ function formatTime(iso) {
   if (diff < 1) return "刚刚";
   if (diff < 60) return `${diff}分钟前`;
   return `${Math.round(diff / 60)}小时前`;
-}
-
-function normalizeError(e) {
-  if (!e) return "未知错误";
-  return typeof e === "string" ? e : e.message || JSON.stringify(e);
 }
 
 /* ── History ── */
@@ -176,8 +172,6 @@ export default function App() {
   const [prefs, setPrefsState] = useState({ mode: "flat", includeBacklinks: true });
   const [format, setFormat] = useState("markdown");
   const [loading, setLoading] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [selectedCount, setSelectedCount] = useState(0);
   const [urlInput, setUrlInput] = useState("");
   const [sendScope, setSendScope] = useState("selection");
   const [workspace, setWorkspace] = useState("send");
@@ -187,11 +181,14 @@ export default function App() {
   const sendHistory = useBridgeStore((s) => s.sendHistory);
   const addSendHistory = useBridgeStore((s) => s.addSendHistory);
   const setConnection = useBridgeStore((s) => s.setConnection);
+  const notice = useBridgeStore((s) => s.notice);
+  const setNotice = useBridgeStore((s) => s.setNotice);
+  const selectedCount = useBridgeStore((s) => (s.selection.cardsInfo?.noteCount || 0));
 
   const { doConnect } = useConnection(setConnection, setUrlInput, setNotice);
   const { discoveredServers, scanning, startScan } = useDiscovery();
   const { setPrefs } = usePreferences(setPrefsState, setNotice);
-  useSelectionPolling(connection.connected, setSelectedCount);
+  useSelectionWatcher(connection.connected);
 
   const { send } = useSend({
     connection, prefs, format, addSendHistory, setNotice, setLoading,

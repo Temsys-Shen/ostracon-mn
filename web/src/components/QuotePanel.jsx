@@ -2,60 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, FileDown, FileText, Folder, FolderSearch, Search, TextCursorInput, X } from "lucide-react";
 import ostraconWsClient from "../lib/ostraconWsClient";
 import { useQuote } from "../hooks/useQuote";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { useVaultFolderPicker } from "../hooks/useVaultFolderPicker";
 
 function QuoteFilePicker({ onChoose, onClose }) {
-  const [folderPath, setFolderPath] = useState("");
-  const [folder, setFolder] = useState({ folders: [], documents: [] });
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const picker = useVaultFolderPicker();
+  const { folderPath, folder, query, documents, loading, error, loadFolder, setQuery, goParent } = picker;
 
-  const loadFolder = async (path) => {
-    setLoading(true);
-    setError("");
-    try {
-      setFolder(await ostraconWsClient.sendObsidianCommand("listVaultFolder", { path }));
-      setFolderPath(path);
-    } catch (nextError) {
-      setError(nextError.message || String(nextError));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { void loadFolder(""); }, []);
-  useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      const text = query.trim();
-      if (!text) {
-        setResults([]);
-        return;
-      }
-      setLoading(true);
-      setError("");
-      try {
-        const response = await ostraconWsClient.sendObsidianCommand(
-          "searchVaultDocuments",
-          { query: text, limit: 100 },
-          120000,
-        );
-        setResults(response.items || []);
-      } catch (nextError) {
-        setError(nextError.message || String(nextError));
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-
-  const documents = query.trim() ? results : folder.documents || [];
-  const goParent = () => {
-    const parts = folderPath.split("/").filter(Boolean);
-    parts.pop();
-    void loadFolder(parts.join("/"));
-  };
+  useEffect(() => { void loadFolder(""); }, [loadFolder]);
+  const debouncedSearch = useDebouncedCallback((text) => { void picker.search(text); }, 250, [picker.search]);
+  useEffect(() => { debouncedSearch(query); }, [query, debouncedSearch]);
 
   return (
     <div className="quote-picker-backdrop" onClick={onClose}>

@@ -1,21 +1,30 @@
 import { useCallback, useState } from "react";
-import MNBridge from "../lib/MNBridge";
-import { renderContinuousPdf } from "../lib/continuousPdf";
+import MNBridge from "../lib/mnBridge";
+import ostraconWsClient from "../lib/ostraconWsClient";
+import { MN_CMD, OB_CMD } from "../lib/commands";
+import { normalizeError } from "../lib/errors";
 
-function bytesToBase64(bytes) {
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
-  return window.btoa(binary);
-}
-
-function splitPdfBytes(bytes, maxChunkChars) {
-  const rawChunkBytes = Math.floor(Number(maxChunkChars) / 4) * 3;
-  if (!Number.isFinite(rawChunkBytes) || rawChunkBytes <= 0) throw new Error("PDF分块上限无效");
-  const chunks = [];
-  for (let offset = 0; offset < bytes.length; offset += rawChunkBytes) {
-    chunks.push(bytesToBase64(bytes.subarray(offset, Math.min(bytes.length, offset + rawChunkBytes))));
+async function cleanupPdfSessions({ mnSessionId, obSessionId }) {
+  const errors = [];
+  if (mnSessionId) {
+    try {
+      await MNBridge.send(MN_CMD.ABORT_PDF_IMPORT, { sessionId: mnSessionId }, 5000);
+    } catch (error) {
+      errors.push(`MN临时会话清理失败: ${normalizeError(error)}`);
+    }
   }
-  return chunks;
+  if (obSessionId) {
+    try {
+      await ostraconWsClient.sendObsidianCommand(
+        OB_CMD.RELEASE_VAULT_DOCUMENT_PDF_EXPORT,
+        { sessionId: obSessionId },
+        10000,
+      );
+    } catch (error) {
+      errors.push(`OB临时会话清理失败: ${normalizeError(error)}`);
+    }
+  }
+  return errors;
 }
 
 function usePdfDocumentImport() {
@@ -23,39 +32,56 @@ function usePdfDocumentImport() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
 
-  const importDocument = useCallback(async ({ element, title }) => {
-    let sessionId = "";
+  const importDocument = useCallback(async ({ path }) => {
+    let obSessionId = "";
+    let mnSessionId = "";
     setError("");
     setProgress(0);
     try {
       setStatus("generating");
-      const bytes = await renderContinuousPdf(element, (_phase, value) => setProgress(Number(value || 0)));
-      setStatus("uploading");
-      const session = await MNBridge.send("createObsidianPdfImportSession", {
-        fileName: `${String(title || "Obsidian文档").trim() || "Obsidian文档"}.pdf`,
-        expectedByteLength: bytes.length,
+      const exported = await ostraconWsClient.sendObsidianCommand(
+        OB_CMD.CREATE_VAULT_DOCUMENT_PDF_EXPORT,
+        { path },
+        120000,
+      );
+      obSessionId = exported.sessionId;
+
+      const imported = await MNBridge.send(MN_CMD.CREATE_PDF_IMPORT_SESSION, {
+        fileName: exported.fileName,
+        expectedByteLength: exported.byteLength,
       }, 10000);
-      sessionId = session.sessionId;
-      const chunks = splitPdfBytes(bytes, session.maxChunkChars);
-      for (let index = 0; index < chunks.length; index += 1) {
-        await MNBridge.send("appendObsidianPdfImportChunk", { sessionId, chunkIndex: index, base64Chunk: chunks[index] }, 15000);
-        setProgress((index + 1) / chunks.length);
+      mnSessionId = imported.sessionId;
+
+      setStatus("uploading");
+      for (let index = 0; index < exported.chunkCount; index += 1) {
+        const chunk = await ostraconWsClient.sendObsidianCommand(
+          OB_CMD.READ_VAULT_DOCUMENT_PDF_CHUNK,
+          { sessionId: obSessionId, chunkIndex: index },
+          30000,
+        );
+        await MNBridge.send(MN_CMD.APPEND_PDF_IMPORT_CHUNK, {
+          sessionId: mnSessionId,
+          chunkIndex: index,
+          base64Chunk: chunk.base64Chunk,
+        }, 15000);
+        setProgress((index + 1) / exported.chunkCount);
       }
+
       setStatus("importing");
-      const result = await MNBridge.send("finalizeObsidianPdfImport", { sessionId }, 60000);
-      sessionId = "";
-      setStatus("idle");
+      const result = await MNBridge.send(MN_CMD.FINALIZE_PDF_IMPORT, { sessionId: mnSessionId }, 60000);
+      mnSessionId = "";
+      await ostraconWsClient.sendObsidianCommand(
+        OB_CMD.RELEASE_VAULT_DOCUMENT_PDF_EXPORT,
+        { sessionId: obSessionId },
+        10000,
+      );
+      obSessionId = "";
       setProgress(1);
+      setStatus("idle");
       return result;
     } catch (caught) {
-      if (sessionId) {
-        try {
-          await MNBridge.send("abortObsidianPdfImport", { sessionId }, 5000);
-        } catch (abortError) {
-          console.log("PDF import abort failed", abortError);
-        }
-      }
-      const message = caught?.message || String(caught);
+      const cleanupErrors = await cleanupPdfSessions({ mnSessionId, obSessionId });
+      const message = [normalizeError(caught), ...cleanupErrors].join("；");
       setError(message);
       setStatus("idle");
       throw new Error(message);
@@ -65,4 +91,4 @@ function usePdfDocumentImport() {
   return { status, progress, error, importDocument };
 }
 
-export { bytesToBase64, splitPdfBytes, usePdfDocumentImport };
+export { cleanupPdfSessions, usePdfDocumentImport };

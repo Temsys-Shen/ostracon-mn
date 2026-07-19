@@ -1,11 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import ostraconWsClient from "../lib/ostraconWsClient";
 import { scanLan } from "../lib/lanScan";
-
-function normalizeError(e) {
-  if (!e) return "未知错误";
-  return typeof e === "string" ? e : e.message || JSON.stringify(e);
-}
+import { normalizeError } from "../lib/errors";
 
 function formatHost(host) {
   if (!host) return "127.0.0.1";

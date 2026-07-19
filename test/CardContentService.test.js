@@ -117,12 +117,24 @@ describe("CardContentService", () => {
     };
 
     const linked = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: true }).markdown;
-    const plain = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: false }).markdown;
+    const plain = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {
+      includeBacklinks: false,
+      cardTemplate: "{{heading}} {{title}}\n\n{{content}}",
+    }).markdown;
 
-    expect(linked).toContain("## [带\\[括号\\]标题](marginnote4app://note/linked-card)");
+    expect(linked).toContain("## [带[括号]标题](marginnote4app://note/linked-card)");
     expect(linked).not.toContain("MarginNote Links");
     expect(plain).toContain("## 带[括号]标题");
     expect(plain).not.toContain("marginnote4app://note/linked-card");
+  });
+
+  test("uses the explicit link variable and rejects the removed link filter", () => {
+    const context = createRuntime();
+    const note = { noteId: "explicit-link", noteTitle: "标题", comments: [{ type: "TextNote", text: "正文" }] };
+    const service = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon;
+    const markdown = service.buildMarkdown(selectionFor(note), { cardTemplate: "{{heading}} [{{title}}]({{link}})\n\n{{content}}" }).markdown;
+    expect(markdown).toContain("## [标题](marginnote4app://note/explicit-link)");
+    expect(() => service.buildMarkdown(selectionFor(note), { cardTemplate: "{{title|link}}" })).toThrow("未知卡片模板过滤器: link");
   });
 
   test("keeps every text comment when noteTitle is explicit", () => {

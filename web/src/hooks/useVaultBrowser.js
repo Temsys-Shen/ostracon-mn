@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ostraconWsClient from "../lib/ostraconWsClient";
+import { OB_CMD } from "../lib/commands";
+import { useAsyncAction } from "./useAsyncAction";
 
 function useVaultBrowser(connection) {
   const [state, setState] = useState(null);
@@ -17,56 +19,55 @@ function useVaultBrowser(connection) {
   const [insertHtml, setInsertHtml] = useState("");
   const [plainText, setPlainText] = useState("");
   const [assetUrls, setAssetUrls] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { loading, error, run } = useAsyncAction();
 
   const command = useCallback((name, payload, timeout) => ostraconWsClient.sendObsidianCommand(name, payload, timeout), []);
 
   const loadState = useCallback(async () => {
     if (!connection.connected) return;
     try {
-      setState(await command("getVaultBrowserState"));
+      setState(await command(OB_CMD.GET_VAULT_BROWSER_STATE));
     } catch (e) {
-      setError(e.message || String(e));
+      console.log("loadState failed", e);
     }
   }, [connection.connected, command]);
 
   const loadFolder = useCallback(async (path = "") => {
-    setLoading(true); setError("");
-    try { setFolder(await command("listVaultFolder", { path })); setFolderPath(path); }
-    catch (e) { setError(e.message || String(e)); }
-    finally { setLoading(false); }
-  }, [command]);
+    await run(async () => {
+      setFolder(await command(OB_CMD.LIST_VAULT_FOLDER, { path }));
+      setFolderPath(path);
+    });
+  }, [run, command]);
 
   const loadTags = useCallback(async () => {
-    setLoading(true); setError("");
-    try { const result = await command("listVaultTags"); setTags(result.tags || []); }
-    catch (e) { setError(e.message || String(e)); }
-    finally { setLoading(false); }
-  }, [command]);
+    await run(async () => {
+      const result = await command(OB_CMD.LIST_VAULT_TAGS);
+      setTags(result.tags || []);
+    });
+  }, [run, command]);
 
   const chooseTag = useCallback(async (tag) => {
     setSelectedTag(tag);
     if (!tag) { setTagDocuments([]); return; }
-    setLoading(true); setError("");
-    try { const result = await command("listVaultDocuments", { tag, limit: 100 }); setTagDocuments(result.items || []); }
-    catch (e) { setError(e.message || String(e)); }
-    finally { setLoading(false); }
-  }, [command]);
+    await run(async () => {
+      const result = await command(OB_CMD.LIST_VAULT_DOCUMENTS, { tag, limit: 100 });
+      setTagDocuments(result.items || []);
+    });
+  }, [run, command]);
 
   const search = useCallback(async (text) => {
     setQuery(text);
     if (!text.trim()) { setSearchResults([]); return; }
-    setLoading(true); setError("");
-    try { const result = await command("searchVaultDocuments", { query: text, limit: 100 }, 120000); setSearchResults(result.items || []); await loadState(); }
-    catch (e) { setError(e.message || String(e)); }
-    finally { setLoading(false); }
-  }, [command, loadState]);
+    await run(async () => {
+      const result = await command(OB_CMD.SEARCH_VAULT_DOCUMENTS, { query: text, limit: 100 }, 120000);
+      setSearchResults(result.items || []);
+      await loadState();
+    });
+  }, [run, command, loadState]);
 
   const openDocument = useCallback(async (path) => {
-    setLoading(true); setError("");
-    try {
-      const detail = await command("getVaultDocument", { path }, 30000);
+    await run(async () => {
+      const detail = await command(OB_CMD.GET_VAULT_DOCUMENT, { path }, 30000);
       const assetItems = detail.assets || [];
       const declaredTotal = assetItems.reduce((sum, item) => sum + Number(item.size || 0), 0);
       if (declaredTotal > 50 * 1024 * 1024) throw new Error("本次插入图片总量超过50MB");
@@ -76,7 +77,7 @@ function useVaultBrowser(connection) {
         while (nextAssetIndex < assetItems.length) {
           const item = assetItems[nextAssetIndex];
           nextAssetIndex += 1;
-          const asset = await command("getVaultAsset", { path: item.path }, 30000);
+          const asset = await command(OB_CMD.GET_VAULT_ASSET, { path: item.path }, 30000);
           assets[item.path] = `data:${asset.mime};base64,${asset.base64}`;
         }
       };
@@ -94,9 +95,8 @@ function useVaultBrowser(connection) {
       setInsertHtml(fullHtml);
       setPlainText(detail.plainText || "");
       setAssetUrls(assets);
-    } catch (e) { setError(e.message || String(e)); }
-    finally { setLoading(false); }
-  }, [command]);
+    });
+  }, [run, command]);
 
   useEffect(() => {
     if (!connection.connected) return;

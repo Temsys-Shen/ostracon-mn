@@ -69,10 +69,6 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     lines.push("");
   }
 
-  function escapeLinkText(value) {
-    return normalizeText(value).replace(/[[\]\\]/g, "\\$&");
-  }
-
   function renderCardTemplate(template, context) {
     if (typeof template !== "string") throw new Error("卡片模板必须是字符串");
     var tokenPattern = /{{([\s\S]*?)}}/g;
@@ -88,12 +84,11 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       else if (!insideLink || context.link) {
         var parts = expression.split("|").map(function (part) { return part.trim(); });
         var variable = parts.shift();
-        if (variable !== "content" && variable !== "title" && variable !== "heading") throw new Error("未知卡片模板变量: " + variable);
-        var value = variable === "content" ? context.content : (variable === "title" ? context.title : context.heading);
+        if (variable !== "content" && variable !== "title" && variable !== "heading" && variable !== "link") throw new Error("未知卡片模板变量: " + variable);
+        var value = variable === "content" ? context.content : (variable === "title" ? context.title : (variable === "heading" ? context.heading : context.link || ""));
         parts.forEach(function (filter) {
           if (filter === "trim") value = value.trim();
           else if (filter === "singleline") value = value.replace(/\s+/g, " ");
-          else if (filter === "link" && variable === "title") value = context.link ? "[" + escapeLinkText(value) + "](" + context.link + ")" : value;
           else throw new Error("未知卡片模板过滤器: " + filter);
         });
         output += value;
@@ -139,7 +134,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var options = normalizeOptions(rawOptions);
     var warnings = createWarningBag();
     var cards = getCardsByMode(selectionResult, options.mode);
-    var template = rawOptions && typeof rawOptions.cardTemplate === "string" ? rawOptions.cardTemplate : "{{heading}} {{title|link}}\n\n{{content}}";
+    var template = rawOptions && typeof rawOptions.cardTemplate === "string" ? rawOptions.cardTemplate : "{{heading}} [{{title}}]({{link}})\n\n{{content}}";
     var sections = cards.map(function (card) {
       return renderCardTemplate(template, renderNote(card, options, warnings));
     }).filter(function (s) { return s.length > 0; });

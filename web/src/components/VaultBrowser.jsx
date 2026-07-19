@@ -11,6 +11,8 @@ import { ArrowLeft, Check, ChevronRight, FileText, Folder, Hash, Link2, PanelLef
 import { useVaultBrowser } from "../hooks/useVaultBrowser";
 import { useDocumentImport } from "../hooks/useDocumentImport";
 import { usePdfDocumentImport } from "../hooks/usePdfDocumentImport";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import useBridgeStore from "../store/useBridgeStore";
 
 function DocumentList({ items, onOpen, scrollRef }) {
   const listRef = useRef(null);
@@ -228,6 +230,7 @@ function VaultBrowser({ connection, setNotice }) {
   const browser = useVaultBrowser(connection);
   const importer = useDocumentImport();
   const pdfImporter = usePdfDocumentImport();
+  const insertContext = useBridgeStore((s) => s.selection.insertContext);
   const bodyRef = useRef(null);
   const previewContentRef = useRef(null);
   const createMenuButtonRef = useRef(null);
@@ -239,21 +242,23 @@ function VaultBrowser({ connection, setNotice }) {
   const [createMode, setCreateMode] = useState("markdown");
   const [createMenu, setCreateMenu] = useState(null);
 
+  // insertContext 由 useSelectionWatcher 在 App 顶层通过 SelectionChanged 事件驱动刷新到 store，
+  // VaultBrowser 直接从 store 读，不再需要 mount 时主动拉取或 3 秒轮询。
+  // useDocumentImport.refreshContext 仍保留，仅用于 insert 成功后兜底刷新（写回 store）。
+
+  const debouncedSearch = useDebouncedCallback(
+    (text) => browser.search(text),
+    250,
+    [browser.search],
+  );
   useEffect(() => {
-    importer.refreshContext().catch(error => console.log("insert context failed", error));
-    const timer = window.setInterval(() => importer.refreshContext().catch(error => console.log("insert context failed", error)), 3000);
-    return () => window.clearInterval(timer);
-  }, [importer.refreshContext]);
+    debouncedSearch(searchText);
+  }, [searchText, debouncedSearch]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => browser.search(searchText), 250);
-    return () => window.clearTimeout(timer);
-  }, [searchText, browser.search]);
-
-  useEffect(() => {
-    const message = importer.error || importer.contextError || browser.error;
+    const message = importer.error || browser.error;
     if (message) setNotice(message);
-  }, [browser.error, importer.contextError, importer.error, setNotice]);
+  }, [browser.error, importer.error, setNotice]);
 
   useEffect(() => {
     if (pdfImporter.status === "generating") setNotice("正在生成PDF");
@@ -279,8 +284,8 @@ function VaultBrowser({ connection, setNotice }) {
   const showDocuments = Boolean(searchText || mode === "files" || browser.selectedTag);
   const pdfBusy = pdfImporter.status !== "idle";
   const importBusy = pdfBusy || importer.status === "uploading" || importer.status === "appending" || importer.status === "creating";
-  const hasCurrentCard = importer.context?.selectedCount === 1;
-  const importTarget = hasCurrentCard ? importer.context.targetTitle : "学习集根部";
+  const hasCurrentCard = insertContext?.selectedCount === 1;
+  const importTarget = hasCurrentCard ? insertContext.targetTitle : "学习集根部";
 
   const handleImport = async (operation, contentMode = "markdown") => {
     try {
@@ -303,7 +308,7 @@ function VaultBrowser({ connection, setNotice }) {
 
   const handlePdfImport = async () => {
     try {
-      await pdfImporter.importDocument({ element: previewContentRef.current, title: browser.document?.title });
+      await pdfImporter.importDocument({ path: browser.document?.path });
       setNotice("PDF已导入当前学习集");
     } catch (error) {
       setNotice(error.message || String(error));

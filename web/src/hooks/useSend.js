@@ -3,11 +3,8 @@ import MNBridge from "../lib/mnBridge";
 import { createPacketDraft, normalizePacket } from "../lib/ostraconContract";
 import ostraconWsClient from "../lib/ostraconWsClient";
 import { normalizeSendScope } from "../lib/sendRules";
-
-function normalizeError(error) {
-  if (!error) return "未知错误";
-  return typeof error === "string" ? error : error.message || JSON.stringify(error);
-}
+import { normalizeError } from "../lib/errors";
+import { MN_CMD } from "../lib/commands";
 
 function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoading }) {
   const renderPacket = useCallback(async (scope) => {
@@ -18,14 +15,14 @@ function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoad
     let sourceTitle;
 
     if (format === "canvas") {
-      const result = await MNBridge.send("previewScopeCanvas", scopePayload, 30000);
+      const result = await MNBridge.send(MN_CMD.PREVIEW_SCOPE_CANVAS, scopePayload, 30000);
       if (!result?.canvas) throw new Error("范围内容为空");
       content = result.canvas;
       noteCount = result.nodeCount;
       fileBaseName = result.fileBaseName || result.scopeTitle || "ostracon-canvas";
       sourceTitle = result.scopeTitle || fileBaseName;
     } else {
-      const result = await MNBridge.send("previewScopeMarkdown", scopePayload, 30000);
+      const result = await MNBridge.send(MN_CMD.PREVIEW_SCOPE_MARKDOWN, scopePayload, 30000);
       if (!result?.markdown) throw new Error("范围内容为空");
       content = result.markdown;
       noteCount = result.noteCount;
@@ -33,7 +30,7 @@ function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoad
       sourceTitle = result.scopeTitle || fileBaseName;
     }
 
-    const cardsResult = await MNBridge.send("listScopeCards", { scope }, 30000);
+    const cardsResult = await MNBridge.send(MN_CMD.LIST_SCOPE_CARDS, { scope }, 30000);
     const packet = normalizePacket(createPacketDraft({
       markdown: content,
       sourceTitle,

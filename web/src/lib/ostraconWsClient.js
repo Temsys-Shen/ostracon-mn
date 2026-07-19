@@ -1,6 +1,7 @@
 import MNBridge from "./mnBridge";
 import { createPacketDraft, normalizePacket } from "./ostraconContract";
 import { createId, nowIso } from "./idUtils";
+import { MN_CMD } from "./commands";
 
 const DEFAULT_PORT = 27123;
 const PROTOCOL_VERSION = 4;
@@ -105,15 +106,15 @@ const WS_STATE_BY = {
 
 const SERVER_COMMAND_HANDLERS = {
   async listNotebooks(self, requestId, payload) {
-    const result = await MNBridge.send("listNotebooks", payload);
+    const result = await MNBridge.send(MN_CMD.LIST_NOTEBOOKS, payload);
     self.sendResult(requestId, result);
   },
   async listCards(self, requestId, payload) {
-    const result = await MNBridge.send("listCards", payload);
+    const result = await MNBridge.send(MN_CMD.LIST_CARDS, payload);
     self.sendResult(requestId, result);
   },
   async fetchCards(self, requestId, payload) {
-    const result = await MNBridge.send("fetchCards", payload, 30000);
+    const result = await MNBridge.send(MN_CMD.FETCH_CARDS, payload, 30000);
     const format = result && result.format === "canvas" ? "canvas" : "markdown";
     const content = format === "canvas" ? result.canvas : result.markdown;
     const packet = normalizePacket(createPacketDraft({
@@ -128,7 +129,7 @@ const SERVER_COMMAND_HANDLERS = {
   },
   async getQuoteSelection(self, requestId, payload) {
     const result = await MNBridge.send(
-      "getQuoteSelection",
+      MN_CMD.GET_QUOTE_SELECTION,
       { createCard: payload && payload.createCard === true },
       30000,
     );
@@ -255,7 +256,7 @@ class OstraconWsClient {
       port: nextSettings.port,
       autoReconnect: nextSettings.autoReconnect,
     });
-    return MNBridge.send("setWsSettings", nextSettings);
+    return MNBridge.send(MN_CMD.SET_WS_SETTINGS, nextSettings);
   }
 
   clearLastError() {
@@ -270,7 +271,7 @@ class OstraconWsClient {
   async loadStoredSettings() {
     let nativeSettings;
     try {
-      nativeSettings = await MNBridge.send("getWsSettings");
+      nativeSettings = await MNBridge.send(MN_CMD.GET_WS_SETTINGS);
     } catch (e) {
       nativeSettings = null;
     }
@@ -283,7 +284,7 @@ class OstraconWsClient {
         if (raw) {
           const legacy = normalizeSettings(JSON.parse(raw));
           nextSettings = legacy;
-          await MNBridge.send("setWsSettings", nextSettings);
+          await MNBridge.send(MN_CMD.SET_WS_SETTINGS, nextSettings);
           window.localStorage.removeItem("ostracon-mn-ws-settings");
         }
       }
@@ -294,7 +295,7 @@ class OstraconWsClient {
     // Load clientId from NSUserDefaults
     let persistedClientId = "";
     try {
-      const result = await MNBridge.send("getClientId");
+      const result = await MNBridge.send(MN_CMD.GET_CLIENT_ID);
       if (result && typeof result === "string" && result.length > 0) {
         persistedClientId = result;
       }
@@ -307,7 +308,7 @@ class OstraconWsClient {
     } else {
       // Persist the temp clientId to NSUserDefaults
       try {
-        await MNBridge.send("setClientId", { clientId: this.clientId });
+        await MNBridge.send(MN_CMD.SET_CLIENT_ID, { clientId: this.clientId });
       } catch (e) {
         // ignore save errors
       }
@@ -754,6 +755,13 @@ class OstraconWsClient {
         break;
       case "event":
         this.setState({ lastEvent: { at: nowIso(), event: message.event || "", payload: message.payload || null } });
+        // 把 ostracon:* 事件转发为 window.CustomEvent，供 React 层监听。
+        // payload 直接放在 event.detail，避免前端再发一次请求。
+        if (typeof window !== "undefined" && message.event && message.event.startsWith("ostracon:")) {
+          try {
+            window.dispatchEvent(new CustomEvent(message.event, { detail: message.payload ?? null }));
+          } catch (e) { /* 忽略派发失败 */ }
+        }
         break;
       case "error":
         this.log("error", "收到OB错误", message.payload || null);

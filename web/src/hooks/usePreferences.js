@@ -1,15 +1,12 @@
 import { useEffect, useCallback } from "react";
 import MNBridge from "../lib/mnBridge";
-
-function normalizeError(e) {
-  if (!e) return "未知错误";
-  return typeof e === "string" ? e : e.message || JSON.stringify(e);
-}
+import { normalizeError } from "../lib/errors";
+import { MN_CMD } from "../lib/commands";
 
 function usePreferences(setPrefsState, setNotice) {
   useEffect(() => {
     let alive = true;
-    MNBridge.send("getMarkdownPreferences").then((mdPrefs) => {
+    MNBridge.send(MN_CMD.GET_MARKDOWN_PREFERENCES).then((mdPrefs) => {
       if (!alive) return;
       if (mdPrefs) {
         setPrefsState({
@@ -24,7 +21,7 @@ function usePreferences(setPrefsState, setNotice) {
   const setPrefs = useCallback((k, v) => {
     setPrefsState((prev) => {
       const n = { ...prev, [k]: v };
-      MNBridge.send("setMarkdownPreferences", n).catch((e) => console.warn("setMarkdownPreferences failed", e));
+      MNBridge.send(MN_CMD.SET_MARKDOWN_PREFERENCES, n).catch((e) => console.warn("setMarkdownPreferences failed", e));
       return n;
     });
   }, [setPrefsState]);
