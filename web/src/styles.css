@@ -99,7 +99,8 @@ body {
 .markdown-preview table { width: 100%; border-collapse: collapse; }.markdown-preview th, .markdown-preview td { padding: 5px 7px; border: 1px solid var(--line); }
 .markdown-preview blockquote { margin: 10px 0; padding: 2px 12px; border-left: 1px solid var(--line-strong); color: var(--muted); }
 .markdown-preview .katex-display { max-width: 100%; margin: 14px 0; padding: 2px 0 6px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; }
-.markdown-preview > * { content-visibility: auto; contain-intrinsic-block-size: auto 80px; }
+.markdown-preview > *:not(.obsidian-html-host) { content-visibility: auto; contain-intrinsic-block-size: auto 80px; }
+.markdown-preview > .obsidian-html-host { content-visibility: visible; contain: none; contain-intrinsic-size: none; }
 .preview-more { display: block; width: 100%; height: 34px; margin: 14px 0 4px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--accent-strong); font-weight: 650; }
 .preview-more:hover { background: var(--accent-soft); border-color: #9cbaf5; }
 .relation-list h3 { margin: 12px 0 5px; font-size: 11px; color: var(--subtle); text-transform: uppercase; }
