@@ -215,11 +215,29 @@ export function measureHtmlContent(element) {
   return { width, height };
 }
 
-function Preview({ document, markdown, html, assetUrls, onOpen, onBack, contentRef }) {
+function PreviewLoading() {
+  return (
+    <section aria-busy="true" aria-label="正在加载文档" className="document-preview preview-loading">
+      <header className="preview-loading-header">
+        <i className="preview-loading-title" />
+        <i className="preview-loading-path" />
+      </header>
+      <div className="preview-loading-body">
+        <div className="preview-loading-indicator"><span /></div>
+        <i className="wide" /><i /><i className="short" />
+        <i className="heading" />
+        <i /><i className="wide" /><i className="medium" />
+      </div>
+    </section>
+  );
+}
+
+function Preview({ document, loading, markdown, html, assetUrls, onOpen, onBack, contentRef }) {
   const [tab, setTab] = useState("body");
   const [visibleCharacters, setVisibleCharacters] = useState(PREVIEW_CHUNK_SIZE);
   const deferredMarkdown = useDeferredValue(markdown);
   useEffect(() => setVisibleCharacters(PREVIEW_CHUNK_SIZE), [document?.path]);
+  if (loading) return <PreviewLoading />;
   if (!document) return <div className="browser-empty"><FileText size={22} /><span>选择文档</span></div>;
   const visibleMarkdown = deferredMarkdown.length > visibleCharacters ? deferredMarkdown.slice(0, visibleCharacters) : deferredMarkdown;
   const hasMore = visibleCharacters < deferredMarkdown.length;
@@ -262,6 +280,22 @@ function VaultBrowser({ connection, setNotice }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [createMode, setCreateMode] = useState("markdown");
   const [createMenu, setCreateMenu] = useState(null);
+
+  useEffect(() => {
+    const pane = listPaneRef.current;
+    if (!pane) return undefined;
+    let hideTimer = null;
+    const handleScroll = () => {
+      pane.classList.add("is-scrolling");
+      if (hideTimer) window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => pane.classList.remove("is-scrolling"), 700);
+    };
+    pane.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      pane.removeEventListener("scroll", handleScroll);
+      if (hideTimer) window.clearTimeout(hideTimer);
+    };
+  }, []);
 
   // insertContext 由 useSelectionWatcher 在 App 顶层通过 SelectionChanged 事件驱动刷新到 store，
   // VaultBrowser 直接从 store 读，不再需要 mount 时主动拉取或 3 秒轮询。
@@ -357,7 +391,7 @@ function VaultBrowser({ connection, setNotice }) {
   };
 
   return (
-    <div className={`vault-browser${browser.document ? " has-preview" : ""}`}>
+    <div className={`vault-browser${browser.document || browser.openingPath ? " has-preview" : ""}`}>
       <div className="browser-toolbar">
         <div className="view-switch"><button className={mode === "files" ? "active" : ""} onClick={() => { setMode("files"); browser.loadFolder(""); }} type="button"><Folder size={14} />文件</button><button className={mode === "tags" ? "active" : ""} onClick={() => setMode("tags")} type="button"><Hash size={14} />标签</button></div>
         <label className="search-box"><Search size={15} /><input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder={browser.state?.searchStatus === "building" ? "正在建立索引" : "搜索文档"} /></label>
@@ -372,11 +406,11 @@ function VaultBrowser({ connection, setNotice }) {
           </div>
           {!searchText && mode === "files" && (browser.folder.folders || []).map(item => <button className="folder-row" key={item.path} onClick={() => browser.loadFolder(item.path)} type="button"><Folder size={15} /><span>{item.name}</span><ChevronRight size={14} /></button>)}
           {!searchText && mode === "tags" && !browser.selectedTag && <div className="tag-list">{browser.tags.map(tag => <button key={tag.name} onClick={() => browser.chooseTag(tag.name)} type="button"><span>{tag.name}</span><small>{tag.count}</small></button>)}</div>}
-          {showDocuments && (browser.loading && browser.activeDocuments.length === 0 ? <div className="browser-skeleton"><i /><i /><i /><i /></div> : <DocumentList activePath={browser.document?.path} items={browser.activeDocuments} onOpen={browser.openDocument} scrollRef={listPaneRef} />)}
+          {showDocuments && (browser.loading && browser.activeDocuments.length === 0 ? <div className="browser-skeleton"><i /><i /><i /><i /></div> : <DocumentList activePath={browser.openingPath || browser.document?.path} items={browser.activeDocuments} onOpen={browser.openDocument} scrollRef={listPaneRef} />)}
         </aside>
         <div className="sidebar-resizer" onPointerDown={startSidebarResize} role="separator" aria-label="调整文件栏宽度" aria-orientation="vertical" />
         {sidebarCollapsed && <button className="icon-button sidebar-expand" onClick={() => setSidebarCollapsed(false)} title="展开文件栏" type="button"><PanelLeftOpen size={16} /></button>}
-        <Preview document={browser.document} markdown={browser.previewMarkdown} html={browser.previewHtml} assetUrls={browser.assetUrls} onOpen={browser.openDocument} onBack={() => browser.setDocument(null)} contentRef={previewContentRef} />
+        <Preview document={browser.document} loading={Boolean(browser.openingPath)} markdown={browser.previewMarkdown} html={browser.previewHtml} assetUrls={browser.assetUrls} onOpen={browser.openDocument} onBack={() => browser.setDocument(null)} contentRef={previewContentRef} />
       </div>
       {browser.document && (
         <footer className="insert-bar">
