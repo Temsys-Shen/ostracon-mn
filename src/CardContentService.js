@@ -53,6 +53,47 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  function createDrawingItem(noteId, drawingId, source, commentIndex, alt) {
+    var drawingBase64;
+    try {
+      var drawingData = Database.sharedInstance().getMediaByHash(drawingId);
+      if (!drawingData) throw new Error("getMediaByHash未返回数据");
+      drawingBase64 = drawingData.base64Encoding();
+      if (!drawingBase64 || typeof drawingBase64 !== "string") throw new Error("base64Encoding未返回字符串");
+    } catch (error) {
+      throw new Error(
+        "手写媒体读取失败: noteId=" + noteId +
+        ", source=" + source +
+        ", commentIndex=" + commentIndex +
+        ", mediaId=" + drawingId +
+        ", error=" + String(error),
+      );
+    }
+
+    try {
+      var renderedDrawing = renderDrawingDataURI(drawingBase64);
+      return {
+        type: "image",
+        mediaId: drawingId,
+        mimeType: "svg+xml",
+        source: source,
+        index: commentIndex,
+        alt: alt || "",
+        dataURI: renderedDrawing.dataURI,
+        strokeCount: renderedDrawing.strokeCount,
+        bounds: renderedDrawing.bounds,
+      };
+    } catch (error) {
+      throw new Error(
+        "手写解析失败: noteId=" + noteId +
+        ", source=" + source +
+        ", commentIndex=" + commentIndex +
+        ", mediaId=" + drawingId +
+        ", error=" + String(error),
+      );
+    }
+  }
+
   function tokenizeTextComment(noteId, comment, commentIndex) {
     var sourceText = normalizeText(comment.text);
     if (!sourceText) return { items: [], title: "" };
@@ -187,9 +228,18 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
       if (type === "LinkNote") {
         var linkPicture = comment.q_hpic;
         var linkMediaId = linkPicture ? normalizeText(linkPicture.paint) : "";
+        var linkDrawingId = linkPicture ? normalizeText(linkPicture.drawing) : "";
         var linkTextFirst = comment.textFirst === true || Number(comment.textFirst) === 1;
-        if (linkMediaId && !linkTextFirst) {
-          comments.push(createImageItem(noteId, linkMediaId, "png", "linkNote", index, "linked excerpt", true));
+        if (linkPicture && !linkTextFirst) {
+          if (!linkMediaId && !linkDrawingId) {
+            throw new Error("LinkNote.q_hpic缺少paint和drawing: noteId=" + noteId + ", commentIndex=" + index);
+          }
+          if (linkMediaId) {
+            comments.push(createImageItem(noteId, linkMediaId, "png", "linkNote", index, "linked excerpt", true));
+          }
+          if (linkDrawingId) {
+            comments.push(createDrawingItem(noteId, linkDrawingId, "linkNoteDrawing", index, "linked handwriting"));
+          }
           continue;
         }
         var linkText = normalizeText(comment.q_htext);
@@ -207,8 +257,14 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
 
       if (type === "PaintNote") {
         var mediaId = normalizeText(comment.paint);
-        if (!mediaId) throw new Error("PaintNote缺少paint: noteId=" + noteId + ", commentIndex=" + index);
-        comments.push(createImageItem(noteId, mediaId, "png", "paintNote", index, "paint note", true));
+        var commentDrawingId = normalizeText(comment.drawing);
+        if (!mediaId && !commentDrawingId) {
+          throw new Error("PaintNote缺少paint和drawing: noteId=" + noteId + ", commentIndex=" + index);
+        }
+        if (mediaId) comments.push(createImageItem(noteId, mediaId, "png", "paintNote", index, "paint note", true));
+        if (commentDrawingId) {
+          comments.push(createDrawingItem(noteId, commentDrawingId, "paintNoteDrawing", index, "handwriting"));
+        }
       }
     }
 
@@ -278,7 +334,8 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
 
     var imageComments = comments.filter(function (comment) { return comment.type === "image"; });
     var handwritingComments = imageComments.filter(function (comment) {
-      return comment.source === "paintNote" || comment.source === "sketchDrawing";
+      return comment.source === "paintNote" || comment.source === "paintNoteDrawing" ||
+        comment.source === "linkNoteDrawing" || comment.source === "sketchDrawing";
     });
 
     return {

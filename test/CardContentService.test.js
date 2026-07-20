@@ -40,6 +40,7 @@ function createRuntime(mediaById = {}, logs = [], sketchByKey = {}) {
   });
 
   loadSource(context, "src/OstraconUtils.js");
+  loadSource(context, "src/FreehandStrokeService.js");
   loadSource(context, "src/InkDrawingService.js");
   loadSource(context, "src/CardContentService.js");
   loadSource(context, "src/MarkdownExportService.js");
@@ -241,11 +242,60 @@ describe("CardContentService", () => {
     const service = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
 
     expect(() => service.parseNote({ noteId: "missing-paint", comments: [{ type: "PaintNote" }] }))
-      .toThrow("PaintNote缺少paint: noteId=missing-paint, commentIndex=0");
+      .toThrow("PaintNote缺少paint和drawing: noteId=missing-paint, commentIndex=0");
 
     const missingMedia = { noteId: "missing-media", comments: [{ type: "PaintNote", paint: "media-404" }] };
     expect(() => context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(missingMedia), {}))
       .toThrow("noteId=missing-media, source=paintNote, commentIndex=0, mediaId=media-404");
+
+    const missingDrawing = { noteId: "missing-drawing", comments: [{ type: "PaintNote", drawing: "drawing-404" }] };
+    expect(() => service.parseNote(missingDrawing))
+      .toThrow("手写媒体读取失败: noteId=missing-drawing, source=paintNoteDrawing, commentIndex=0, mediaId=drawing-404");
+
+    const invalidContext = createRuntime({ invalid: "%%%" });
+    expect(() => invalidContext.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "invalid-drawing",
+      comments: [{ type: "PaintNote", drawing: "invalid" }],
+    })).toThrow("手写解析失败: noteId=invalid-drawing, source=paintNoteDrawing, commentIndex=0, mediaId=invalid");
+  });
+
+  test("renders drawing PaintNote comments as ordered SVG handwriting", () => {
+    const drawing = createInkArchive();
+    const context = createRuntime({ paint: "cGFpbnQ=", drawing, sketch: drawing }, [], {
+      "book:paint-drawing": { comments: [{ drawing: "sketch" }] },
+    });
+    const note = {
+      noteId: "paint-drawing",
+      notebookId: "book",
+      noteTitle: "手写卡片",
+      comments: [
+        { type: "TextNote", text: "前文" },
+        { type: "PaintNote", paint: "paint", drawing: "drawing" },
+        { type: "TextNote", text: "后文" },
+      ],
+    };
+
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {}).markdown;
+
+    expect(content.comments.map(item => item.source || item.type)).toEqual([
+      "text",
+      "paintNote",
+      "paintNoteDrawing",
+      "text",
+      "sketchDrawing",
+    ]);
+    expect(content.comments[2].strokeCount).toBe(1);
+    expect(content.imageCount).toBe(3);
+    expect(content.hasHandwriting).toBe(true);
+    expect(markdown.indexOf("data:image/png;base64,cGFpbnQ=")).toBeLessThan(markdown.indexOf("data:image/svg+xml;base64,"));
+
+    const drawingOnly = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "drawing-only",
+      comments: [{ type: "PaintNote", drawing: "drawing" }],
+    });
+    expect(drawingOnly.comments.map(item => item.source)).toEqual(["paintNoteDrawing"]);
+    expect(drawingOnly.comments[0].mimeType).toBe("svg+xml");
   });
 
   test("returns identical Markdown for MN send and OB fetch commands", () => {
@@ -387,14 +437,15 @@ describe("CardContentService", () => {
   });
 
   test("uses LinkNote images instead of OCR text when the LinkNote textFirst is disabled", () => {
-    const context = createRuntime({ "linked-image": "TElOS0VE" });
+    const drawing = createInkArchive();
+    const context = createRuntime({ "linked-image": "TElOS0VE", "linked-drawing": drawing });
     const note = {
       noteId: "linked-image-note",
       noteTitle: "图片摘录",
       comments: [{
         type: "LinkNote",
         noteid: "26647D2E-197A-452B-B07E-6D4285C42926",
-        q_hpic: { paint: "linked-image" },
+        q_hpic: { paint: "linked-image", drawing: "linked-drawing" },
         q_htext: "不应导出的OCR文字",
         textFirst: false,
         markdown: false,
@@ -404,13 +455,33 @@ describe("CardContentService", () => {
     const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {}).markdown;
     const canvas = JSON.parse(context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {}).canvas);
 
-    expect(content.comments.map(item => item.source || item.type)).toEqual(["linkNote"]);
+    expect(content.comments.map(item => item.source || item.type)).toEqual(["linkNote", "linkNoteDrawing"]);
     expect(content.commentText).toBe("");
     expect(content.hasImage).toBe(true);
+    expect(content.hasHandwriting).toBe(true);
+    expect(content.comments[1].strokeCount).toBe(1);
     expect(markdown).toContain("data:image/png;base64,TElOS0VE");
+    expect(markdown.indexOf("data:image/png;base64,TElOS0VE")).toBeLessThan(markdown.indexOf("data:image/svg+xml;base64,"));
     expect(markdown).not.toContain("不应导出的OCR文字");
     expect(canvas.nodes[0].text).toContain("data:image/png;base64,TElOS0VE");
+    expect(canvas.nodes[0].text).toContain("data:image/svg+xml;base64,");
     expect(canvas.nodes[0].text).not.toContain("不应导出的OCR文字");
+
+    const drawingOnly = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "linked-drawing-only",
+      comments: [{ type: "LinkNote", q_hpic: { drawing: "linked-drawing" }, textFirst: false }],
+    });
+    expect(drawingOnly.comments.map(item => item.source)).toEqual(["linkNoteDrawing"]);
+
+    expect(() => context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "linked-fields-missing",
+      comments: [{ type: "LinkNote", q_hpic: {}, textFirst: false }],
+    })).toThrow("LinkNote.q_hpic缺少paint和drawing: noteId=linked-fields-missing, commentIndex=0");
+
+    expect(() => context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "linked-drawing-missing",
+      comments: [{ type: "LinkNote", q_hpic: { drawing: "missing" }, textFirst: false }],
+    })).toThrow("手写媒体读取失败: noteId=linked-drawing-missing, source=linkNoteDrawing, commentIndex=0, mediaId=missing");
   });
 
   test("converts PNG and JPEG markdown images in place without deduplication", () => {
