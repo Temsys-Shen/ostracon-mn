@@ -3,6 +3,7 @@ JSB.require("CardSelectionService");
 JSB.require("OstraconUtils");
 JSB.require("FreehandStrokeService");
 JSB.require("InkDrawingService");
+JSB.require("HtmlCompatibilityService");
 JSB.require("CardContentService");
 JSB.require("MarkdownExportService");
 JSB.require("CanvasExportService");

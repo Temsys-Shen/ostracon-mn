@@ -4,6 +4,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
   var arrayFromNSArray = _utils.arrayFromNSArray;
   var getNoteId = _utils.getNoteId;
   var renderDrawingDataURI = __MN_INK_DRAWING_SERVICE_MNOstraconAddon.renderDrawingDataURI;
+  var convertHtml = __MN_HTML_COMPATIBILITY_SERVICE_MNOstraconAddon.convertHtml;
   var MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(marginnote4app:\/\/markdownimg\/(png|jpeg)\/([^\s)]+)\)/g;
   var sketchFailureLogKeys = {};
 
@@ -222,6 +223,14 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
         var parsedText = tokenized.buildItems(consumeTitle);
         comments = comments.concat(parsedText.items);
         if (parsedText.commentText) commentTexts.push(parsedText.commentText);
+        continue;
+      }
+
+      if (type === "HtmlNote") {
+        var html = convertHtml(comment.html, { noteId: noteId, commentIndex: index });
+        comments.push({ type: "text", text: html, markdown: false, html: true, index: index });
+        var htmlPlainText = normalizeText(comment.text);
+        if (htmlPlainText) commentTexts.push(htmlPlainText);
         continue;
       }
 

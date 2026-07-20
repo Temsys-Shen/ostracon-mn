@@ -42,6 +42,7 @@ function createRuntime(mediaById = {}, logs = [], sketchByKey = {}) {
   loadSource(context, "src/OstraconUtils.js");
   loadSource(context, "src/FreehandStrokeService.js");
   loadSource(context, "src/InkDrawingService.js");
+  loadSource(context, "src/HtmlCompatibilityService.js");
   loadSource(context, "src/CardContentService.js");
   loadSource(context, "src/MarkdownExportService.js");
   loadSource(context, "src/CanvasExportService.js");
@@ -418,6 +419,43 @@ describe("CardContentService", () => {
     expect(markdown).toContain("HMG-CoA还原酶");
     expect(canvas.nodes[0].text.indexOf("文本1")).toBeLessThan(canvas.nodes[0].text.indexOf("文本2"));
     expect(canvas.nodes[0].text).toContain("HMG-CoA还原酶");
+  });
+
+  test("preserves HtmlNote compatible HTML between linked and handwritten comments", () => {
+    const drawing = createInkArchive();
+    const context = createRuntime({ linked: "TElOS0VE", drawing });
+    const html = '<!DOCTYPE html><html><body><p><strong>阿爸阿爸</strong></p></body></html>';
+    const note = {
+      noteId: "html-note",
+      noteTitle: "你好",
+      comments: [
+        { type: "LinkNote", q_hpic: { paint: "linked" }, textFirst: false },
+        { type: "HtmlNote", html, text: "阿爸阿爸" },
+        { type: "PaintNote", drawing: "drawing" },
+      ],
+    };
+
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {}).markdown;
+    const canvas = JSON.parse(context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {}).canvas);
+    const compatibleHtml = "<p><strong>阿爸阿爸</strong></p>";
+
+    expect(content.comments.map(item => item.source || (item.html ? "htmlComment" : item.type))).toEqual([
+      "linkNote",
+      "htmlComment",
+      "paintNoteDrawing",
+    ]);
+    expect(content.commentText).toBe("阿爸阿爸");
+    expect(markdown).toContain(compatibleHtml);
+    expect(markdown).not.toContain("<!DOCTYPE");
+    expect(markdown.indexOf("data:image/png;base64,TElOS0VE")).toBeLessThan(markdown.indexOf(compatibleHtml));
+    expect(markdown.indexOf(compatibleHtml)).toBeLessThan(markdown.indexOf("data:image/svg+xml;base64,"));
+    expect(canvas.nodes[0].text).toContain(compatibleHtml);
+
+    expect(() => context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "html-missing",
+      comments: [{ type: "HtmlNote", text: "禁止降级为纯文本" }],
+    })).toThrow("HtmlNote缺少html: noteId=html-missing, commentIndex=0");
   });
 
   test("uses OCR text instead of an excerpt image when textFirst is enabled", () => {
