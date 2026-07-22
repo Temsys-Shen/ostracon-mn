@@ -102,7 +102,8 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     }
 
     const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
-    const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, prefs);
+    const options = { ...prefs, cardTemplate: payload && payload.cardTemplate };
+    const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, options);
     return {
       format,
       cards,

@@ -10,7 +10,10 @@ vi.mock("../lib/ostraconWsClient", () => ({ default: { sendPacket: vi.fn() } }))
 
 function createProps(format = "markdown") {
   return {
-    connection: { connected: true },
+    connection: {
+      connected: true,
+      lastHello: { payload: { cardTemplate: "{{heading}} {{title}}{{#link}} [MN]({{link}}){{/link}}\n\n{{content}}" } },
+    },
     prefs: { mode: "flat", includeBacklinks: true },
     format,
     addSendHistory: vi.fn(),
@@ -34,7 +37,10 @@ describe("useSend", () => {
 
     await act(() => result.current.send({ scope }));
 
-    expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeMarkdown", { scope, options: props.prefs }, 30000);
+    expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeMarkdown", {
+      scope,
+      options: { ...props.prefs, cardTemplate: props.connection.lastHello.payload.cardTemplate },
+    }, 30000);
     expect(MNBridge.send).toHaveBeenNthCalledWith(2, "listScopeCards", { scope }, 30000);
     expect(ostraconWsClient.sendPacket).toHaveBeenCalledOnce();
     expect(ostraconWsClient.sendPacket.mock.calls[0][0].fileName).toBe("Example");

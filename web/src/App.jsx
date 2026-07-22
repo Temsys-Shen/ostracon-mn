@@ -186,7 +186,7 @@ export default function App() {
   const selectedCount = useBridgeStore((s) => (s.selection.cardsInfo?.noteCount || 0));
 
   const { doConnect } = useConnection(setConnection, setUrlInput, setNotice);
-  const { discoveredServers, scanning, startScan } = useDiscovery();
+  const { discoveredServers, scanning, startScan } = useDiscovery(connection.connected);
   const { setPrefs } = usePreferences(setPrefsState, setNotice);
   useSelectionWatcher(connection.connected);
 

@@ -5,7 +5,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var parseNote = _contentService.parseNote;
   var resolveFileBaseName = _contentService.resolveFileBaseName;
   var resolveRootFileBaseName = _contentService.resolveRootFileBaseName;
-  var DEFAULT_CARD_TEMPLATE = "{{heading}} {{title}}{{#link}} [<img src=\"https://www.marginnote.com.cn/assets/logo.png\" width=\"20\">]({{link}}){{/link}}\n\n{{content}}";
+  var DEFAULT_CARD_TEMPLATE = "{{heading}} {{title}}\n\n{{content}}";
 
   function sanitizeFilePart(value) {
     return normalizeText(value).replace(/[^A-Za-z0-9._\u4e00-\u9fff-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "unknown";

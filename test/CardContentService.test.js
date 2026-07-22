@@ -8,6 +8,7 @@ import { describe, expect, test } from "vitest";
 import { createDrawingArchive, createInkArchive } from "./helpers/inkFixture.js";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const OB_CARD_TEMPLATE = "{{heading}} {{title}}{{#link}} [<img src=\"https://www.marginnote.com.cn/assets/logo.png\" width=\"20\">]({{link}}){{/link}}\n\n{{content}}";
 
 function loadSource(context, relativePath) {
   const filePath = path.join(rootDir, relativePath);
@@ -97,7 +98,7 @@ describe("CardContentService", () => {
     };
 
     const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
-    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {}).markdown;
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { cardTemplate: OB_CARD_TEMPLATE }).markdown;
     const canvas = JSON.parse(context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {}).canvas);
 
     expect(content.title).toBe("第一条作为标题");
@@ -119,7 +120,7 @@ describe("CardContentService", () => {
       comments: [{ type: "TextNote", text: "正文" }],
     };
 
-    const linked = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: true }).markdown;
+    const linked = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: true, cardTemplate: OB_CARD_TEMPLATE }).markdown;
     const plain = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {
       includeBacklinks: false,
       cardTemplate: "{{heading}} {{title}}\n\n{{content}}",
@@ -131,7 +132,7 @@ describe("CardContentService", () => {
     expect(plain).toContain("## 带[括号]标题");
     expect(plain).not.toContain("marginnote4app://note/linked-card");
 
-    const withoutBacklink = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: false }).markdown;
+    const withoutBacklink = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: false, cardTemplate: OB_CARD_TEMPLATE }).markdown;
     expect(withoutBacklink).toContain("## 带[括号]标题");
     expect(withoutBacklink).not.toContain("https://www.marginnote.com.cn/assets/logo.png");
   });

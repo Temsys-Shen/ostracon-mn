@@ -8,7 +8,14 @@ import { MN_CMD } from "../lib/commands";
 
 function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoading }) {
   const renderPacket = useCallback(async (scope) => {
-    const scopePayload = { scope, options: prefs };
+    const serverCardTemplate = connection.lastHello?.payload?.cardTemplate;
+    if (format !== "canvas" && typeof serverCardTemplate !== "string") {
+      throw new Error("OB未提供卡片模板，请更新两端插件");
+    }
+    const scopePayload = {
+      scope,
+      options: format === "canvas" ? prefs : { ...prefs, cardTemplate: serverCardTemplate },
+    };
     let content;
     let noteCount;
     let fileBaseName;
@@ -42,7 +49,7 @@ function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoad
     }));
 
     return { packet, noteCount, fileBaseName };
-  }, [format, prefs]);
+  }, [connection.lastHello, format, prefs]);
 
   const send = useCallback(async ({ scope } = {}) => {
     if (!connection.connected) {

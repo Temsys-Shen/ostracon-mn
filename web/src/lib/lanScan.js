@@ -62,8 +62,9 @@ export const __test__ = {
 /**
  * Probe a single host:port for the OB discovery endpoint.
  */
-async function probeHost(host, port) {
+async function probeHost(host, port, controllers) {
   var controller = new AbortController();
+  controllers.add(controller);
   var timer = setTimeout(function () {
     controller.abort();
   }, TIMEOUT_MS);
@@ -82,6 +83,7 @@ async function probeHost(host, port) {
     // host unreachable or CORS error — skip
   } finally {
     clearTimeout(timer);
+    controllers.delete(controller);
   }
   return null;
 }
@@ -93,54 +95,67 @@ async function probeHost(host, port) {
  * @param {string} lastHost - last connected host from settings
  * @returns {Function} stop function
  */
-export async function scanLan(port, onFound, lastHost) {
+export function scanLan(port, onFound, lastHost) {
   var stopped = false;
+  var controllers = new Set();
 
-  // Always try localhost first (fast)
-  var localhosts = ["127.0.0.1", "[::1]"];
-  for (var i = 0; i < localhosts.length; i++) {
+  async function run() {
+    // Always try localhost first (fast)
+    var localhosts = ["127.0.0.1", "[::1]"];
+    for (var i = 0; i < localhosts.length; i++) {
+      if (stopped) return;
+      var result = await probeHost(localhosts[i], port, controllers);
+      if (result && !stopped && onFound) onFound(result);
+    }
+
     if (stopped) return;
-    var result = await probeHost(localhosts[i], port);
-    if (result && onFound) onFound(result);
-  }
 
-  if (stopped) return;
-
-  // Also try the last connected host
-  if (lastHost && lastHost !== "127.0.0.1" && lastHost !== "::1" && lastHost !== "::") {
-    var clean = lastHost;
-    if (clean.startsWith("[") && clean.endsWith("]")) {
-      clean = clean.slice(1, -1);
+    // Also try the last connected host
+    if (lastHost && lastHost !== "127.0.0.1" && lastHost !== "::1" && lastHost !== "::") {
+      var clean = lastHost;
+      if (clean.startsWith("[") && clean.endsWith("]")) {
+        clean = clean.slice(1, -1);
+      }
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(clean)) {
+        var lr = await probeHost(clean, port, controllers);
+        if (lr && !stopped && onFound) onFound(lr);
+      }
     }
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(clean)) {
-      var lr = await probeHost(clean, port);
-      if (lr && onFound) onFound(lr);
-    }
-  }
 
-  if (stopped) return;
+    if (stopped) return;
 
-  var subnets = getCandidateSubnets(lastHost);
+    var subnets = getCandidateSubnets(lastHost);
 
-  // Scan subnets with concurrency
-  for (var s = 0; s < subnets.length && !stopped; s++) {
-    var hosts = buildHosts(subnets[s]);
-    for (var j = 0; j < hosts.length && !stopped; j += CONCURRENCY) {
-      var batch = hosts.slice(j, j + CONCURRENCY);
-      var results = await Promise.all(
-        batch.map(function (host) {
-          return probeHost(host, port);
-        }),
-      );
-      for (var k = 0; k < results.length && !stopped; k++) {
-        if (results[k] && onFound) {
-          onFound(results[k]);
+    // Scan subnets with concurrency
+    for (var s = 0; s < subnets.length && !stopped; s++) {
+      var hosts = buildHosts(subnets[s]);
+      for (var j = 0; j < hosts.length && !stopped; j += CONCURRENCY) {
+        var batch = hosts.slice(j, j + CONCURRENCY);
+        var results = await Promise.all(
+          batch.map(function (host) {
+            return probeHost(host, port, controllers);
+          }),
+        );
+        for (var k = 0; k < results.length && !stopped; k++) {
+          if (results[k] && onFound) {
+            onFound(results[k]);
+          }
         }
       }
     }
   }
 
+  run().catch(function (error) {
+    if (!stopped) {
+      console.log("[Ostracon] discovery scan failed:", error);
+    }
+  });
+
   return function stop() {
     stopped = true;
+    controllers.forEach(function (controller) {
+      controller.abort();
+    });
+    controllers.clear();
   };
 }

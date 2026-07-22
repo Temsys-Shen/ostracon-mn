@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import ostraconWsClient from "../lib/ostraconWsClient";
 import { scanLan } from "../lib/lanScan";
 import { normalizeError } from "../lib/errors";
@@ -77,20 +77,36 @@ function useConnection(setConnection, setUrlInput, setNotice) {
   return { doConnect, parseConnectionUrl };
 }
 
-function useDiscovery() {
+function useDiscovery(connected) {
   const [discoveredServers, setDiscoveredServers] = useState([]);
   const [scanning, setScanning] = useState(false);
-  const stopRef = { current: null };
+  const stopRef = useRef(null);
+  const timeoutRef = useRef(null);
 
-  const startScan = useCallback(async () => {
-    setScanning(true);
-    setDiscoveredServers([]);
-
-    // Stop any previous scan
+  const stopScan = useCallback(() => {
     if (stopRef.current) {
       stopRef.current();
       stopRef.current = null;
     }
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setScanning(false);
+  }, []);
+
+  useEffect(() => {
+    if (connected) {
+      stopScan();
+    }
+  }, [connected, stopScan]);
+
+  useEffect(() => stopScan, [stopScan]);
+
+  const startScan = useCallback(() => {
+    stopScan();
+    setScanning(true);
+    setDiscoveredServers([]);
 
     const port = ostraconWsClient.settings.port || 27123;
     const lastHost = ostraconWsClient.settings.host || "";
@@ -105,24 +121,15 @@ function useDiscovery() {
       });
     };
 
-    try {
-      const stop = await scanLan(port, onFound, lastHost);
-      stopRef.current = stop;
-    } catch (e) {
-      console.log("[Ostracon] discovery scan failed:", e);
-    }
+    stopRef.current = scanLan(port, onFound, lastHost);
 
     // Auto-stop scan after 30 seconds (subnet scanning can take a while)
-    setTimeout(() => {
-      if (stopRef.current) {
-        stopRef.current();
-        stopRef.current = null;
-      }
-      setScanning(false);
+    timeoutRef.current = window.setTimeout(() => {
+      stopScan();
     }, 30000);
-  }, []);
+  }, [stopScan]);
 
-  return { discoveredServers, scanning, startScan };
+  return { discoveredServers, scanning, startScan, stopScan };
 }
 
 export { useConnection, useDiscovery, parseConnectionUrl, formatWsUrl };
