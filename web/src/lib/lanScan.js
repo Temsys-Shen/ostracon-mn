@@ -7,48 +7,6 @@ const CONCURRENCY = 50;
 const TIMEOUT_MS = 800;
 
 /**
- * Try to discover the local IP via WebRTC (may not work in all webviews).
- */
-function getLocalIP() {
-  return new Promise((resolve) => {
-    try {
-      var RTCPeerConnection =
-        window.RTCPeerConnection ||
-        window.webkitRTCPeerConnection ||
-        window.mozRTCPeerConnection;
-      if (!RTCPeerConnection) {
-        resolve(null);
-        return;
-      }
-      var pc = new RTCPeerConnection({ iceServers: [] });
-      pc.createDataChannel("");
-      pc.createOffer()
-        .then(function (offer) {
-          return pc.setLocalDescription(offer);
-        })
-        .catch(function () {
-          resolve(null);
-        });
-      pc.onicecandidate = function (ice) {
-        if (!ice || !ice.candidate || !ice.candidate.candidate) return;
-        var parts = ice.candidate.candidate.split(" ");
-        var ip = parts[4];
-        if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
-          pc.close();
-          resolve(ip);
-        }
-      };
-      setTimeout(function () {
-        pc.close();
-        resolve(null);
-      }, 2000);
-    } catch (e) {
-      resolve(null);
-    }
-  });
-}
-
-/**
  * Build candidate host list from a subnet.
  */
 function buildHosts(subnet) {
@@ -59,17 +17,22 @@ function buildHosts(subnet) {
   return hosts;
 }
 
-/**
- * Get candidate subnets based on local IP or fallback to common ones.
- */
-function getCandidateSubnets(localIP, lastHost) {
-  var subnets = [];
-
-  // From local IP
-  if (localIP) {
-    var parts = localIP.split(".");
-    subnets.push(parts[0] + "." + parts[1] + "." + parts[2]);
+function buildFallbackSubnets() {
+  var subnets = ["192.168.1", "192.168.100"];
+  for (var i = 0; i <= 99; i++) {
+    if (i !== 1) {
+      subnets.push("192.168." + i);
+    }
   }
+  subnets.push("10.0.0", "172.16.0");
+  return subnets;
+}
+
+/**
+ * Get candidate subnets based on the last connected host and known LAN ranges.
+ */
+function getCandidateSubnets(lastHost) {
+  var subnets = [];
 
   // From last connected host
   if (lastHost && /^\d+\.\d+\.\d+\.\d+$/.test(lastHost) && lastHost !== "127.0.0.1") {
@@ -81,7 +44,7 @@ function getCandidateSubnets(localIP, lastHost) {
   }
 
   // Fallback: common subnets
-  var fallbacks = ["192.168.1", "192.168.0", "10.0.0", "172.16.0"];
+  var fallbacks = buildFallbackSubnets();
   fallbacks.forEach(function (sn) {
     if (subnets.indexOf(sn) === -1) {
       subnets.push(sn);
@@ -90,6 +53,11 @@ function getCandidateSubnets(localIP, lastHost) {
 
   return subnets;
 }
+
+export const __test__ = {
+  buildFallbackSubnets,
+  getCandidateSubnets,
+};
 
 /**
  * Probe a single host:port for the OB discovery endpoint.
@@ -152,9 +120,7 @@ export async function scanLan(port, onFound, lastHost) {
 
   if (stopped) return;
 
-  // Get local IP to determine subnet
-  var localIP = await getLocalIP();
-  var subnets = getCandidateSubnets(localIP, lastHost);
+  var subnets = getCandidateSubnets(lastHost);
 
   // Scan subnets with concurrency
   for (var s = 0; s < subnets.length && !stopped; s++) {
