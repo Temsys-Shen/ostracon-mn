@@ -431,7 +431,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
       canvas: JSON.stringify(canvasObj, null, 2),
       nodeCount: nodes.length,
       edgeCount: edges.length,
-      fileBaseName: resolveRootFileBaseName(selectionResult),
+      fileBaseName: selectionResult.fileBaseName || resolveRootFileBaseName(selectionResult),
     };
   }
 

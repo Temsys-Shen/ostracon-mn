@@ -120,4 +120,128 @@ function createInkArchive(options = {}) {
   return Buffer.concat([Buffer.from([119, 114, 100, 240, 1, 0, 8, 0]), ...payload]).toString("base64");
 }
 
-export { createInkArchive };
+function uid(value) {
+  return { __bplistUid: value };
+}
+
+function unsignedBytes(value, byteLength) {
+  const output = Buffer.alloc(byteLength);
+  let current = value;
+  for (let index = byteLength - 1; index >= 0; index--) {
+    output[index] = current % 256;
+    current = Math.floor(current / 256);
+  }
+  return output;
+}
+
+function byteLengthFor(value) {
+  if (value <= 0xff) return 1;
+  if (value <= 0xffff) return 2;
+  if (value <= 0xffffffff) return 4;
+  return 8;
+}
+
+function lengthPrefix(type, length) {
+  if (length < 15) return Buffer.from([(type << 4) | length]);
+  const byteLength = byteLengthFor(length);
+  const power = Math.log2(byteLength);
+  return Buffer.concat([Buffer.from([(type << 4) | 15, (1 << 4) | power]), unsignedBytes(length, byteLength)]);
+}
+
+function encodeBinaryPlist(root) {
+  const objects = [];
+
+  function addObject(value) {
+    const reference = objects.length;
+    const entry = { value, childReferences: null };
+    objects.push(entry);
+    if (Array.isArray(value)) {
+      entry.childReferences = value.map(addObject);
+    } else if (value && typeof value === "object" && !Buffer.isBuffer(value) && value.__bplistUid === undefined) {
+      const keys = Object.keys(value);
+      entry.childReferences = {
+        keys: keys.map(addObject),
+        values: keys.map(key => addObject(value[key])),
+      };
+    }
+    return reference;
+  }
+
+  const topObject = addObject(root);
+  const referenceSize = byteLengthFor(objects.length - 1);
+
+  function encodeObject(entry) {
+    const value = entry.value;
+    if (value === null) return Buffer.from([0]);
+    if (value === false) return Buffer.from([8]);
+    if (value === true) return Buffer.from([9]);
+    if (typeof value === "number") {
+      const byteLength = byteLengthFor(value);
+      return Buffer.concat([Buffer.from([(1 << 4) | Math.log2(byteLength)]), unsignedBytes(value, byteLength)]);
+    }
+    if (typeof value === "string") {
+      const bytes = Buffer.from(value, "ascii");
+      return Buffer.concat([lengthPrefix(5, bytes.length), bytes]);
+    }
+    if (Buffer.isBuffer(value)) return Buffer.concat([lengthPrefix(4, value.length), value]);
+    if (value && value.__bplistUid !== undefined) {
+      const byteLength = byteLengthFor(value.__bplistUid);
+      return Buffer.concat([Buffer.from([(8 << 4) | (byteLength - 1)]), unsignedBytes(value.__bplistUid, byteLength)]);
+    }
+    if (Array.isArray(value)) {
+      return Buffer.concat([
+        lengthPrefix(10, entry.childReferences.length),
+        ...entry.childReferences.map(reference => unsignedBytes(reference, referenceSize)),
+      ]);
+    }
+    const references = entry.childReferences;
+    return Buffer.concat([
+      lengthPrefix(13, references.keys.length),
+      ...references.keys.map(reference => unsignedBytes(reference, referenceSize)),
+      ...references.values.map(reference => unsignedBytes(reference, referenceSize)),
+    ]);
+  }
+
+  const header = Buffer.from("bplist00");
+  const encodedObjects = objects.map(encodeObject);
+  const offsets = [];
+  let position = header.length;
+  encodedObjects.forEach((object) => {
+    offsets.push(position);
+    position += object.length;
+  });
+  const offsetSize = byteLengthFor(position);
+  const offsetTable = Buffer.concat(offsets.map(offset => unsignedBytes(offset, offsetSize)));
+  const trailer = Buffer.alloc(32);
+  trailer[6] = offsetSize;
+  trailer[7] = referenceSize;
+  unsignedBytes(objects.length, 8).copy(trailer, 8);
+  unsignedBytes(topObject, 8).copy(trailer, 16);
+  unsignedBytes(position, 8).copy(trailer, 24);
+  return Buffer.concat([header, ...encodedObjects, offsetTable, trailer]);
+}
+
+function createDrawingArchive(drawings = {}) {
+  const archivedObjects = ["$null", null];
+  const keys = [];
+  const values = [];
+  ["drawing2", "drawing1"].forEach((key) => {
+    if (!drawings[key]) return;
+    keys.push(uid(archivedObjects.length));
+    archivedObjects.push(key);
+    values.push(uid(archivedObjects.length));
+    archivedObjects.push(Buffer.from(drawings[key], "base64"));
+  });
+  const classIndex = archivedObjects.length;
+  archivedObjects.push({ $classes: ["NSDictionary", "NSObject"], $classname: "NSDictionary" });
+  archivedObjects[1] = { "NS.keys": keys, "NS.objects": values, $class: uid(classIndex) };
+
+  return encodeBinaryPlist({
+    $version: 100000,
+    $archiver: "NSKeyedArchiver",
+    $top: { root: uid(1) },
+    $objects: archivedObjects,
+  }).toString("base64");
+}
+
+export { createDrawingArchive, createInkArchive };

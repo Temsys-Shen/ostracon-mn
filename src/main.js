@@ -2,6 +2,7 @@ JSB.require("WebDevServerConfig");
 JSB.require("CardSelectionService");
 JSB.require("OstraconUtils");
 JSB.require("FreehandStrokeService");
+JSB.require("DrawingArchiveService");
 JSB.require("InkDrawingService");
 JSB.require("HtmlCompatibilityService");
 JSB.require("CardContentService");

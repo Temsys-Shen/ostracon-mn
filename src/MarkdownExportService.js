@@ -5,6 +5,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var parseNote = _contentService.parseNote;
   var resolveFileBaseName = _contentService.resolveFileBaseName;
   var resolveRootFileBaseName = _contentService.resolveRootFileBaseName;
+  var DEFAULT_CARD_TEMPLATE = "{{heading}} {{title}}{{#link}} [<img src=\"https://www.marginnote.com.cn/assets/logo.png\" width=\"20\">]({{link}}){{/link}}\n\n{{content}}";
 
   function sanitizeFilePart(value) {
     return normalizeText(value).replace(/[^A-Za-z0-9._\u4e00-\u9fff-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "unknown";
@@ -134,15 +135,15 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var options = normalizeOptions(rawOptions);
     var warnings = createWarningBag();
     var cards = getCardsByMode(selectionResult, options.mode);
-    var template = rawOptions && typeof rawOptions.cardTemplate === "string" ? rawOptions.cardTemplate : "{{heading}} [{{title}}]({{link}})\n\n{{content}}";
+    var template = rawOptions && typeof rawOptions.cardTemplate === "string" ? rawOptions.cardTemplate : DEFAULT_CARD_TEMPLATE;
     var sections = cards.map(function (card) {
       return renderCardTemplate(template, renderNote(card, options, warnings));
     }).filter(function (s) { return s.length > 0; });
 
     var firstCard = cards[0] && cards[0].note ? cards[0].note : null;
-    var firstTitle = options.mode === "tree"
+    var firstTitle = selectionResult.fileBaseName || (options.mode === "tree"
       ? resolveRootFileBaseName(selectionResult)
-      : (firstCard ? resolveFileBaseName(firstCard) : "Untitled");
+      : (firstCard ? resolveFileBaseName(firstCard) : "Untitled"));
 
     return {
       markdown: sections.join("\n\n") + "\n",

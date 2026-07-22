@@ -12,9 +12,9 @@ function note(noteId, children = []) {
   return { noteId, childNotes: children, comments: [] };
 }
 
-function createService(notes) {
+function createService(notes, title = "学习集") {
   const context = vm.createContext({
-    Database: { sharedInstance: () => ({ getNotebookById: () => ({ title: "学习集", notes }) }) },
+    Database: { sharedInstance: () => ({ getNotebookById: () => ({ title, notes }) }) },
   });
   const source = fs.readFileSync(path.join(rootDir, "src/CardSelectionService.js"), "utf8");
   vm.runInContext(source, context, { filename: "CardSelectionService.js" });
@@ -34,6 +34,43 @@ describe("CardSelectionService notebook scope", () => {
     expect(selection.treeRoots[0].children[0].children[0].noteId).toBe("grandchild");
   });
 
+  test("collects hidden descendants that are absent from notebook.notes", () => {
+    const grandchild = note("grandchild");
+    grandchild.hidden = true;
+    const child = note("child", [grandchild]);
+    child.hidden = true;
+    const root = note("root", [child]);
+    const selection = createService([root]).getScopeSelection({}, "notebook", { notebookId: "nb" }).selection;
+
+    expect(selection.flatCards.map(card => card.noteId)).toEqual(["root", "child", "grandchild"]);
+    expect(selection.treeCards.map(card => card.noteId)).toEqual(["root", "child", "grandchild"]);
+    expect(selection.treeRoots[0].children[0].children[0].note).toBe(grandchild);
+  });
+
+  test("removes Group shadow notes and keeps their target LinkNote comment", () => {
+    const group = note("group");
+    group.groupNoteId = "target";
+    group.hidden = true;
+    group.excerptPic = { paint: "group-paint" };
+    const target = note("target");
+    target.comments = [{ type: "LinkNote", noteid: "group", q_hpic: { paint: "group-paint" }, textFirst: false }];
+    const selection = createService([group, target], "弗洛伊德学习集")
+      .getScopeSelection({}, "notebook", { notebookId: "nb" }).selection;
+
+    expect(selection.flatCards.map(card => card.noteId)).toEqual(["target"]);
+    expect(selection.treeCards.map(card => card.noteId)).toEqual(["target"]);
+    expect(selection.flatCards[0].note.comments).toEqual(target.comments);
+    expect(selection.fileBaseName).toBe("弗洛伊德学习集");
+  });
+
+  test("rejects Group notes whose target is absent", () => {
+    const group = note("group");
+    group.groupNoteId = "missing";
+
+    expect(() => createService([group]).getScopeSelection({}, "notebook", { notebookId: "nb" }))
+      .toThrow("学习集Group卡片目标不在卡片集合中: group=group, target=missing");
+  });
+
   test("keeps independent roots in source order", () => {
     const second = note("second");
     const first = note("first");
@@ -50,7 +87,7 @@ describe("CardSelectionService notebook scope", () => {
     const second = note("second");
     first.childNotes = [second];
     second.childNotes = [first];
-    expect(() => createService([first, second]).getScopeSelection({}, "notebook", { notebookId: "nb" })).toThrow("学习集卡片层级存在循环");
+    expect(() => createService([first]).getScopeSelection({}, "notebook", { notebookId: "nb" })).toThrow("学习集卡片层级存在循环");
   });
 
   test("rejects a card referenced by multiple parents", () => {

@@ -1,6 +1,8 @@
 var __MN_INK_DRAWING_SERVICE_MNOstraconAddon = (function () {
   var BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  var INK_WIDTH_SCALE = 1.25;
   var getFreehandStroke = __MN_FREEHAND_STROKE_SERVICE_MNOstraconAddon.getStroke;
+  var extractDrawingData = __MN_DRAWING_ARCHIVE_SERVICE_MNOstraconAddon.extractDrawingData;
   var FORMAT_STRIDE_MAP = {
     1: 8, 3: 12,
     35: 14, 67: 14, 131: 14, 259: 14,
@@ -257,14 +259,13 @@ var __MN_INK_DRAWING_SERVICE_MNOstraconAddon = (function () {
   }
 
   function getInkOptions(inkType, width) {
-    var scaleFactor = 0.75;
     if (inkType.indexOf("pencil") >= 0) {
-      return { size: width * scaleFactor, thinning: 0.65, smoothing: 0.4, streamline: 0.4, simulatePressure: false, start: { taper: true }, end: { taper: true } };
+      return { size: width, thinning: 0.65, smoothing: 0.4, streamline: 0.4, simulatePressure: false, start: { taper: true }, end: { taper: true } };
     }
     if (inkType.indexOf("marker") >= 0) {
-      return { size: width * scaleFactor * 1.3, thinning: 0.15, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { taper: false }, end: { taper: false } };
+      return { size: width * 1.3, thinning: 0.15, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { taper: false }, end: { taper: false } };
     }
-    return { size: width * scaleFactor, thinning: 0.55, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { taper: true }, end: { taper: true } };
+    return { size: width, thinning: 0.55, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { taper: true }, end: { taper: true } };
   }
 
   function parseStroke(raw, inks, index) {
@@ -286,7 +287,7 @@ var __MN_INK_DRAWING_SERVICE_MNOstraconAddon = (function () {
       if (!pathField) throw new Error("missing-stroke-path-" + index);
       var transformField = firstField(grouped, 7, 2);
       var centerline = parseCenterline(pathField.raw, parseTransform(transformField ? transformField.raw : null));
-      var effectiveWidth = ink.type.indexOf("marker") >= 0 ? ink.width * 3 : ink.width;
+      var effectiveWidth = (ink.type.indexOf("marker") >= 0 ? ink.width * 3 : ink.width) * INK_WIDTH_SCALE;
       if (centerline.length === 1) {
         shapes.push({ kind: "circle", point: centerline[0], radius: effectiveWidth / 2, ink: ink });
       } else {
@@ -391,7 +392,7 @@ var __MN_INK_DRAWING_SERVICE_MNOstraconAddon = (function () {
   }
 
   function renderDrawingDataURI(base64) {
-    var decoded = decodeInkData(decodeBase64(base64));
+    var decoded = decodeInkData(extractDrawingData(decodeBase64(base64)));
     var bounds = computeBounds(decoded.shapes);
     var svg = renderSvg(decoded.shapes, bounds);
     return {

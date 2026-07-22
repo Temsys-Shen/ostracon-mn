@@ -5,13 +5,13 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { createInkArchive } from "./helpers/inkFixture.js";
+import { createDrawingArchive, createInkArchive } from "./helpers/inkFixture.js";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function loadService() {
   const context = vm.createContext({ Uint8Array, DataView, ArrayBuffer, console });
-  ["src/FreehandStrokeService.js", "src/InkDrawingService.js"].forEach((relativePath) => {
+  ["src/FreehandStrokeService.js", "src/DrawingArchiveService.js", "src/InkDrawingService.js"].forEach((relativePath) => {
     const filePath = path.join(rootDir, relativePath);
     vm.runInContext(fs.readFileSync(filePath, "utf8"), context, { filename: filePath });
   });
@@ -55,6 +55,27 @@ describe("InkDrawingService", () => {
     expect(svg).toContain('fill="rgba(0,0,255,0.4)"');
   });
 
+  test("renders stored ink widths at the calibrated MarginNote scale", () => {
+    const result = loadService().renderDrawingDataURI(createInkArchive({
+      inks: [{ type: "com.apple.ink.pen", width: 4, color: { r: 0, g: 0, b: 0, a: 1 } }],
+      strokes: [{
+        inkIndex: 0,
+        points: [{ x: 0, y: 0, pressure: 0.5 }, { x: 40, y: 0, pressure: 0.5 }],
+        transform: {},
+      }],
+    }));
+
+    expect(result.bounds.height).toBeGreaterThan(3.2);
+    expect(result.bounds.height).toBeLessThan(3.5);
+
+    const dot = loadService().renderDrawingDataURI(createInkArchive({
+      inks: [{ type: "com.apple.ink.pen", width: 4, color: { r: 0, g: 0, b: 0, a: 1 } }],
+      strokes: [{ inkIndex: 0, points: [{ x: 10, y: 10 }], pointStride: 8, transform: {} }],
+    }));
+    expect(dot.bounds.width).toBeCloseTo(5, 5);
+    expect(dot.bounds.height).toBeCloseTo(5, 5);
+  });
+
   test("renders final field 11 fragments instead of the erased centerline", () => {
     const archive = createInkArchive({
       points: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
@@ -82,11 +103,34 @@ describe("InkDrawingService", () => {
     });
   });
 
+  test("selects one drawing2 payload from keyed archives", () => {
+    const drawing1 = createInkArchive();
+    const drawing2 = createInkArchive({
+      strokes: [
+        { inkIndex: 0, points: [{ x: 0, y: 0 }, { x: 20, y: 0 }] },
+        { inkIndex: 0, points: [{ x: 0, y: 20 }, { x: 20, y: 20 }] },
+      ],
+    });
+    const result = loadService().renderDrawingDataURI(createDrawingArchive({ drawing1, drawing2 }));
+
+    expect(result.strokeCount).toBe(2);
+    expect(decodeSvg(result).match(/<path /g)).toHaveLength(2);
+  });
+
+  test("renders one drawing1 payload when keyed archives have no drawing2", () => {
+    const result = loadService().renderDrawingDataURI(createDrawingArchive({ drawing1: createInkArchive() }));
+
+    expect(result.strokeCount).toBe(1);
+    expect(decodeSvg(result).match(/<path /g)).toHaveLength(1);
+  });
+
   test("rejects malformed archives and invalid ink references", () => {
     const service = loadService();
     expect(() => service.renderDrawingDataURI("%%%")) .toThrow("invalid-base64");
     expect(() => service.renderDrawingDataURI(Buffer.from("bad-header").toString("base64"))).toThrow("invalid-magic-header");
     expect(() => service.renderDrawingDataURI(Buffer.from([119, 114, 100, 0, 0, 0, 0, 0]).toString("base64"))).toThrow("unsupported-wrd-header");
+    expect(() => service.renderDrawingDataURI(Buffer.from("bplist00").toString("base64"))).toThrow("truncated-bplist-trailer");
+    expect(() => service.renderDrawingDataURI(createDrawingArchive({}))).toThrow("missing-keyed-archive-drawing-data");
     expect(() => service.renderDrawingDataURI(createInkArchive({ strokes: [{ inkIndex: 1 }] }))).toThrow("invalid-ink-index-0-1");
     expect(() => service.renderDrawingDataURI(createInkArchive({ pointStride: 7, points: [{ x: 1, y: 2 }] }))).toThrow("invalid-point-stride");
   });

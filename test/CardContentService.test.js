@@ -5,7 +5,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { createInkArchive } from "./helpers/inkFixture.js";
+import { createDrawingArchive, createInkArchive } from "./helpers/inkFixture.js";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -41,6 +41,7 @@ function createRuntime(mediaById = {}, logs = [], sketchByKey = {}) {
 
   loadSource(context, "src/OstraconUtils.js");
   loadSource(context, "src/FreehandStrokeService.js");
+  loadSource(context, "src/DrawingArchiveService.js");
   loadSource(context, "src/InkDrawingService.js");
   loadSource(context, "src/HtmlCompatibilityService.js");
   loadSource(context, "src/CardContentService.js");
@@ -104,13 +105,13 @@ describe("CardContentService", () => {
     expect(content.imageCount).toBe(2);
     expect(markdown.match(/data:image\/png;base64,cG5n/g)).toHaveLength(2);
     expect(canvas.nodes[0].text.match(/data:image\/png;base64,cG5n/g)).toHaveLength(2);
-    expect(markdown).toContain("## [第一条作为标题](marginnote4app://note/note-1)");
+    expect(markdown).toContain("## 第一条作为标题 [<img src=\"https://www.marginnote.com.cn/assets/logo.png\" width=\"20\">](marginnote4app://note/note-1)");
     expect(markdown).toContain("第二条正文");
     expect(markdown).not.toContain("OCR文本不应出现");
     expect(canvas.nodes[0].text).not.toContain("OCR文本不应出现");
   });
 
-  test("puts the MarginNote backlink on the card heading", () => {
+  test("puts the MarginNote backlink on the logo image", () => {
     const context = createRuntime();
     const note = {
       noteId: "linked-card",
@@ -124,10 +125,15 @@ describe("CardContentService", () => {
       cardTemplate: "{{heading}} {{title}}\n\n{{content}}",
     }).markdown;
 
-    expect(linked).toContain("## [带[括号]标题](marginnote4app://note/linked-card)");
+    expect(linked).toContain("## 带[括号]标题 [<img src=\"https://www.marginnote.com.cn/assets/logo.png\" width=\"20\">](marginnote4app://note/linked-card)");
+    expect(linked).not.toContain("[带[括号]标题](marginnote4app://note/linked-card)");
     expect(linked).not.toContain("MarginNote Links");
     expect(plain).toContain("## 带[括号]标题");
     expect(plain).not.toContain("marginnote4app://note/linked-card");
+
+    const withoutBacklink = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { includeBacklinks: false }).markdown;
+    expect(withoutBacklink).toContain("## 带[括号]标题");
+    expect(withoutBacklink).not.toContain("https://www.marginnote.com.cn/assets/logo.png");
   });
 
   test("uses the explicit link variable and rejects the removed link filter", () => {
@@ -205,6 +211,21 @@ describe("CardContentService", () => {
     const flatMarkdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, { mode: "flat" });
 
     expect(flatMarkdown.fileBaseName).toBe("平铺首卡");
+  });
+
+  test("uses the learning-set title for Markdown and Canvas file names", () => {
+    const context = createRuntime();
+    const note = { noteId: "first-card", noteTitle: "首个卡片", comments: [] };
+    const selection = selectionFor(note);
+    selection.fileBaseName = "精神分析学习集";
+
+    const flatMarkdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, { mode: "flat" });
+    const treeMarkdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, { mode: "tree" });
+    const canvas = context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
+
+    expect(flatMarkdown.fileBaseName).toBe("精神分析学习集");
+    expect(treeMarkdown.fileBaseName).toBe("精神分析学习集");
+    expect(canvas.fileBaseName).toBe("精神分析学习集");
   });
 
   test("keeps root order when root create dates are equal", () => {
@@ -297,6 +318,30 @@ describe("CardContentService", () => {
     });
     expect(drawingOnly.comments.map(item => item.source)).toEqual(["paintNoteDrawing"]);
     expect(drawingOnly.comments[0].mimeType).toBe("svg+xml");
+  });
+
+  test("renders one handwriting item for archived PaintNote and LinkNote drawings", () => {
+    const archivedDrawing = createDrawingArchive({
+      drawing1: createInkArchive(),
+      drawing2: createInkArchive({
+        strokes: [
+          { inkIndex: 0, points: [{ x: 0, y: 0 }, { x: 20, y: 0 }] },
+          { inkIndex: 0, points: [{ x: 0, y: 20 }, { x: 20, y: 20 }] },
+        ],
+      }),
+    });
+    const context = createRuntime({ archivedDrawing });
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
+      noteId: "archived-drawings",
+      comments: [
+        { type: "PaintNote", drawing: "archivedDrawing" },
+        { type: "LinkNote", q_hpic: { drawing: "archivedDrawing" }, textFirst: false },
+      ],
+    });
+
+    expect(content.comments.map(item => item.source)).toEqual(["paintNoteDrawing", "linkNoteDrawing"]);
+    expect(content.comments.map(item => item.strokeCount)).toEqual([2, 2]);
+    expect(content.imageCount).toBe(2);
   });
 
   test("returns identical Markdown for MN send and OB fetch commands", () => {

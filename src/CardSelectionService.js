@@ -194,23 +194,53 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   function selectionFromRootNotes(notes) {
     const notesById = {};
     const orderedIds = [];
-    notes.forEach(function (note) {
+    const indexedIds = {};
+    const indexingIds = {};
+
+    function indexNote(note) {
       const noteId = String(note && note.noteId || "");
       if (!noteId) throw new Error("学习集卡片缺少noteId");
-      if (notesById[noteId]) return;
-      notesById[noteId] = note;
-      orderedIds.push(noteId);
+      if (!notesById[noteId]) {
+        notesById[noteId] = note;
+        orderedIds.push(noteId);
+      }
+      if (indexedIds[noteId] || indexingIds[noteId]) return;
+      indexingIds[noteId] = true;
+      arrayFromNSArray(note.childNotes).forEach(indexNote);
+      delete indexingIds[noteId];
+      indexedIds[noteId] = true;
+    }
+
+    notes.forEach(indexNote);
+
+    const groupTargetByNoteId = {};
+    const cardIds = orderedIds.filter(function (noteId) {
+      const groupTargetId = String(notesById[noteId].groupNoteId || "");
+      if (!groupTargetId) return true;
+      if (groupTargetId === noteId) throw new Error("学习集Group卡片不能指向自身: " + noteId);
+      groupTargetByNoteId[noteId] = groupTargetId;
+      return false;
+    });
+    Object.keys(groupTargetByNoteId).forEach(function (groupNoteId) {
+      const targetId = groupTargetByNoteId[groupNoteId];
+      if (!notesById[targetId]) {
+        throw new Error("学习集Group卡片目标不在卡片集合中: group=" + groupNoteId + ", target=" + targetId);
+      }
+      if (groupTargetByNoteId[targetId]) {
+        throw new Error("学习集Group卡片目标不能是Group卡片: group=" + groupNoteId + ", target=" + targetId);
+      }
     });
 
     const childIdsByParent = {};
     const referencedChildIds = {};
     const parentByChildId = {};
-    orderedIds.forEach(function (noteId) {
+    cardIds.forEach(function (noteId) {
       const uniqueChildIds = {};
       childIdsByParent[noteId] = arrayFromNSArray(notesById[noteId].childNotes).map(function (childNote) {
         const childId = String(childNote && childNote.noteId || "");
         if (!childId) throw new Error("学习集子卡片缺少noteId: parent=" + noteId);
         if (!notesById[childId]) throw new Error("学习集子卡片不在卡片集合中: " + childId);
+        if (groupTargetByNoteId[childId]) return null;
         if (uniqueChildIds[childId]) return null;
         if (parentByChildId[childId] && parentByChildId[childId] !== noteId) {
           throw new Error("学习集卡片存在多个上级: " + childId);
@@ -237,13 +267,13 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
       };
     }
 
-    const rootIds = orderedIds.filter(function (noteId) { return !referencedChildIds[noteId]; });
-    if (orderedIds.length > 0 && rootIds.length === 0) {
-      buildTree(orderedIds[0], 0, 0);
+    const rootIds = cardIds.filter(function (noteId) { return !referencedChildIds[noteId]; });
+    if (cardIds.length > 0 && rootIds.length === 0) {
+      buildTree(cardIds[0], 0, 0);
       throw new Error("学习集卡片层级不存在根节点");
     }
     const treeRoots = rootIds.map(function (noteId, index) { return buildTree(noteId, index, 0); }).filter(Boolean);
-    orderedIds.forEach(function (noteId, index) {
+    cardIds.forEach(function (noteId, index) {
       if (!visitState[noteId]) {
         const extraRoot = buildTree(noteId, treeRoots.length + index, 0);
         if (extraRoot) treeRoots.push(extraRoot);
@@ -374,10 +404,13 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     if (!notebookId) throw new Error("缺少当前学习集ID");
     var notebook = db.getNotebookById(notebookId);
     if (!notebook) throw new Error("未找到笔记本: " + notebookId);
+    var title = String(notebook.title || "当前学习集");
+    var selection = selectionFromRootNotes(arrayFromNSArray(notebook.notes));
+    selection.fileBaseName = title;
     return {
       id: notebookId,
-      title: String(notebook.title || "当前学习集"),
-      selection: selectionFromRootNotes(arrayFromNSArray(notebook.notes)),
+      title: title,
+      selection: selection,
     };
   }
 
