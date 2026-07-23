@@ -50,7 +50,8 @@ function createMNOstraconAddon(mainPath) {
       const checked =
         self.webController &&
         self.webController.view &&
-        self.webController.view.window
+        self.webController.view.window &&
+        !self.webController.view.hidden
           ? true
           : false;
 
@@ -67,7 +68,7 @@ function createMNOstraconAddon(mainPath) {
         throw new Error("webController not initialized");
       }
 
-      if (self.webController.view && self.webController.view.window) {
+      if (self.webController.view && self.webController.view.window && !self.webController.view.hidden) {
         __MN_WEB_API_MNOstraconAddon.hidePanel(self.webController);
       } else {
         __MN_WEB_API_MNOstraconAddon.showPanel(self.webController);

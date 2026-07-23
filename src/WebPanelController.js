@@ -35,7 +35,6 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
 
   function performCloseWindow(controller) {
     controller.view.hidden = true;
-    if (controller.view.superview) controller.view.removeFromSuperview();
     NSUserDefaults.standardUserDefaults().setObjectForKey(false, _fm.PANEL_ON_KEY);
     NSTimer.scheduledTimerWithTimeInterval(0, false, function () {
       var targetWindow = controller.addon ? controller.addon.window : controller.addonWindow;
@@ -355,6 +354,7 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller._isMaximized = false;
     _fm.applySavedOrDefaultFrame(controller);
     controller.view.hidden = false;
+    _bd.evaluateScript(controller.webView, "typeof window.__onPanelShow==='function'&&window.__onPanelShow();");
     NSUserDefaults.standardUserDefaults().setObjectForKey(true, _fm.PANEL_ON_KEY);
   }
 

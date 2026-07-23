@@ -20,6 +20,7 @@ export const MN_CMD = {
   LIST_NOTEBOOKS: "listNotebooks",
   LIST_CARDS: "listCards",
   FETCH_CARDS: "fetchCards",
+  OPEN_MARGIN_NOTE_URL: "openMarginNoteUrl",
 
   // 引文
   GET_QUOTE_SELECTION: "getQuoteSelection",

@@ -31,6 +31,7 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     echo,
     closePanel,
     discoverServers,
+    openMarginNoteUrl: __MN_MARGIN_NOTE_URL_SERVICE_MNOstraconAddon.open,
     getMarkdownPreferences: __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.getMarkdownPreferences,
     setMarkdownPreferences: __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.setMarkdownPreferences,
     getWsSettings: __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.getWsSettings,

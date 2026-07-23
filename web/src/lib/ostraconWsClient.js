@@ -4,7 +4,8 @@ import { createId, nowIso } from "./idUtils";
 import { MN_CMD } from "./commands";
 
 const DEFAULT_PORT = 27123;
-const PROTOCOL_VERSION = 4;
+const PROTOCOL_VERSION = 5;
+const OPEN_MARGIN_NOTE_URL_CAPABILITY = "open_marginnote_url";
 const PLUGIN_ID = "ostracon-mn";
 const EXPECTED_SERVER_PLUGIN_ID = "ostracon-ob";
 const VERSION_MISMATCH_ERROR = "插件版本不一致，请同时更新MarginNote端和Obsidian端";
@@ -67,6 +68,7 @@ function buildClientHelloPayload(settings, clientId) {
       "command_result",
       "ack",
       "error",
+      OPEN_MARGIN_NOTE_URL_CAPABILITY,
     ],
     outputPreference: "obsidian-vault",
     requestedAt: nowIso(),
@@ -133,6 +135,27 @@ const SERVER_COMMAND_HANDLERS = {
       { createCard: payload && payload.createCard === true },
       30000,
     );
+    self.sendResult(requestId, result);
+  },
+  async openMarginNoteUrl(self, requestId, payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new Error("打开MarginNote链接的payload必须是对象");
+    }
+    if (typeof payload.url !== "string" || !payload.url.trim()) {
+      throw new Error("MarginNote链接不能为空");
+    }
+
+    let url;
+    try {
+      url = new URL(payload.url.trim());
+    } catch {
+      throw new Error("MarginNote链接格式无效");
+    }
+    if (url.protocol.toLowerCase() !== "marginnote4app:") {
+      throw new Error("仅支持marginnote4app链接");
+    }
+
+    const result = await MNBridge.send(MN_CMD.OPEN_MARGIN_NOTE_URL, { url: url.href });
     self.sendResult(requestId, result);
   },
 };
