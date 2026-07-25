@@ -5,9 +5,9 @@ const bridgeMocks = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("./mnBridge", () => ({ default: { send: bridgeMocks.send } }));
 
 describe("Ostracon protocol", () => {
-  test("advertises protocol 5 remote MarginNote URL opening", () => {
+  test("advertises protocol 6 remote MarginNote URL opening", () => {
     const hello = buildClientHelloPayload({ host: "::1", port: 27123 }, "client-1");
-    expect(PROTOCOL_VERSION).toBe(5);
+    expect(PROTOCOL_VERSION).toBe(6);
     expect(hello.capabilities).toContain("command_result");
     expect(hello.capabilities).toContain("open_marginnote_url");
     expect(hello.capabilities).not.toContain("sync" + "_request");

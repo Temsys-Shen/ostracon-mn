@@ -9,12 +9,21 @@ import { MN_CMD } from "../lib/commands";
 function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoading }) {
   const renderPacket = useCallback(async (scope) => {
     const serverCardTemplate = connection.lastHello?.payload?.cardTemplate;
+    const cardTitlePolicy = connection.lastHello?.payload?.cardTitlePolicy;
     if (format !== "canvas" && typeof serverCardTemplate !== "string") {
       throw new Error("OB未提供卡片模板，请更新两端插件");
     }
+    if (!cardTitlePolicy || typeof cardTitlePolicy !== "object"
+      || typeof cardTitlePolicy.useContentAsTitle !== "boolean"
+      || typeof cardTitlePolicy.untitledTitle !== "string"
+      || !cardTitlePolicy.untitledTitle.trim()) {
+      throw new Error("OB未提供无标题策略，请更新两端插件");
+    }
     const scopePayload = {
       scope,
-      options: format === "canvas" ? prefs : { ...prefs, cardTemplate: serverCardTemplate },
+      options: format === "canvas"
+        ? { ...prefs, cardTitlePolicy }
+        : { ...prefs, cardTemplate: serverCardTemplate, cardTitlePolicy },
     };
     let content;
     let noteCount;
@@ -37,7 +46,7 @@ function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoad
       sourceTitle = result.scopeTitle || fileBaseName;
     }
 
-    const cardsResult = await MNBridge.send(MN_CMD.LIST_SCOPE_CARDS, { scope }, 30000);
+    const cardsResult = await MNBridge.send(MN_CMD.LIST_SCOPE_CARDS, { scope, cardTitlePolicy }, 30000);
     const packet = normalizePacket(createPacketDraft({
       markdown: content,
       sourceTitle,

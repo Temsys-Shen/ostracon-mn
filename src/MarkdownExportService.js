@@ -1,15 +1,13 @@
 var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
   var normalizeText = _utils.normalizeText;
+  var resolveCardTitlePolicy = _utils.resolveCardTitlePolicy;
+  var sanitizeFileBaseName = _utils.sanitizeFileBaseName;
   var _contentService = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
   var parseNote = _contentService.parseNote;
   var resolveFileBaseName = _contentService.resolveFileBaseName;
   var resolveRootFileBaseName = _contentService.resolveRootFileBaseName;
   var DEFAULT_CARD_TEMPLATE = "{{heading}} {{title}}\n\n{{content}}";
-
-  function sanitizeFilePart(value) {
-    return normalizeText(value).replace(/[^A-Za-z0-9._\u4e00-\u9fff-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "unknown";
-  }
 
   function normalizeOptions(options) {
     const src = options || {};
@@ -17,6 +15,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       mode: src.mode === "tree" ? "tree" : "flat",
       includeImages: src.includeImages !== false,
       includeBacklinks: src.includeBacklinks !== false,
+      cardTitlePolicy: resolveCardTitlePolicy(src.cardTitlePolicy),
     };
   }
 
@@ -103,7 +102,7 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
 
   function renderNote(card, options, warnings) {
     const note = card.note;
-    const content = parseNote(note);
+    const content = parseNote(note, options.cardTitlePolicy);
     const headingLevel = options.mode === "tree" ? card.depth + 1 : 2;
     const contentBase = options.mode === "tree" ? headingLevel : 2;
     var lines = [];
@@ -142,13 +141,13 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
 
     var firstCard = cards[0] && cards[0].note ? cards[0].note : null;
     var firstTitle = selectionResult.fileBaseName || (options.mode === "tree"
-      ? resolveRootFileBaseName(selectionResult)
-      : (firstCard ? resolveFileBaseName(firstCard) : "Untitled"));
+      ? resolveRootFileBaseName(selectionResult, options.cardTitlePolicy)
+      : (firstCard ? resolveFileBaseName(firstCard, options.cardTitlePolicy) : "Untitled"));
 
     return {
       markdown: sections.join("\n\n") + "\n",
       noteCount: cards.length,
-      fileBaseName: sanitizeFilePart(firstTitle || "Untitled"),
+      fileBaseName: sanitizeFileBaseName(firstTitle || "Untitled", "Untitled"),
       warnings: warnings.items,
     };
   }

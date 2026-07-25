@@ -9,6 +9,8 @@ import { createDrawingArchive, createInkArchive } from "./helpers/inkFixture.js"
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OB_CARD_TEMPLATE = "{{heading}} {{title}}{{#link}} [<img src=\"https://www.marginnote.com.cn/assets/logo.png\" width=\"20\">]({{link}}){{/link}}\n\n{{content}}";
+const CONTENT_TITLE_POLICY = { useContentAsTitle: true, untitledTitle: "无标题卡片" };
+const FIXED_TITLE_POLICY = { useContentAsTitle: false, untitledTitle: "未命名" };
 
 function loadSource(context, relativePath) {
   const filePath = path.join(rootDir, relativePath);
@@ -162,21 +164,72 @@ describe("CardContentService", () => {
     expect(content.titleSourceIndex).toBe(-1);
   });
 
-  test("builds readable file names from noteTitle, excerptText, and Untitled", () => {
+  test("builds file names from the same resolved title used by card content", () => {
     const context = createRuntime();
     const service = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
-    const excerpt = "这是一段没有卡片标题的摘录文本，用于生成可读文件名称，并且超过四十个字符后应当被截断";
+    const excerpt = "这是一段没有卡片标题的摘录文本";
 
     expect(service.resolveFileBaseName({ noteTitle: "原始卡片标题", excerptText: "忽略" })).toBe("原始卡片标题");
-    expect(service.resolveFileBaseName({ noteTitle: "", excerptText: `  ${excerpt}\n第二行  ` })).toBe(`${excerpt} 第二行`.slice(0, 40).trim());
-    expect(service.resolveFileBaseName({ noteTitle: "", excerptText: "" })).toBe("Untitled");
+    expect(service.resolveFileBaseName({ noteTitle: "", excerptText: `  ${excerpt}\n第二行  ` })).toBe(excerpt);
+    expect(service.resolveFileBaseName({ noteTitle: "", excerptText: "" })).toBe("无标题卡片");
 
     const note = { noteId: "filename-card", noteTitle: "", excerptText: "摘录文件名", comments: [{ type: "TextNote", text: "评论标题" }] };
     const selection = selectionFor(note);
     const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, {});
     const canvas = context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
-    expect(markdown.fileBaseName).toBe("摘录文件名");
-    expect(canvas.fileBaseName).toBe("摘录文件名");
+    expect(markdown.fileBaseName).toBe("评论标题");
+    expect(canvas.fileBaseName).toBe("评论标题");
+  });
+
+  test("limits Markdown and Canvas file names to 12 characters", () => {
+    const context = createRuntime();
+    const note = { noteId: "long-file-name", noteTitle: "一二三四五六七八九十十一十二十三", comments: [] };
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {});
+    const canvas = context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {});
+
+    expect(markdown.fileBaseName).toBe("一二三四五六七八九十十一");
+    expect(canvas.fileBaseName).toBe("一二三四五六七八九十十一");
+    expect(markdown.fileBaseName).not.toContain("…");
+  });
+
+  test("uses a fixed untitled title without consuming the first content line", () => {
+    const context = createRuntime();
+    const note = {
+      noteId: "fixed-untitled",
+      noteTitle: "",
+      excerptText: "摘录正文",
+      comments: [{ type: "TextNote", text: "第一行\n第二行", markdown: true }],
+    };
+
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, FIXED_TITLE_POLICY);
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {
+      cardTemplate: OB_CARD_TEMPLATE,
+      cardTitlePolicy: FIXED_TITLE_POLICY,
+    }).markdown;
+    const canvas = JSON.parse(context.__MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selectionFor(note), {
+      cardTitlePolicy: FIXED_TITLE_POLICY,
+    }).canvas);
+
+    expect(content.title).toBe("未命名");
+    expect(content.commentText).toBe("摘录正文\n\n第一行\n第二行");
+    expect(markdown).toContain("## 未命名");
+    expect(markdown).toContain("摘录正文");
+    expect(markdown).toContain("第一行\n第二行");
+    expect(canvas.nodes[0].text).toContain("## 未命名");
+    expect(canvas.nodes[0].text).toContain("第一行\n第二行");
+  });
+
+  test("keeps explicit note titles under both title policies", () => {
+    const context = createRuntime();
+    const note = { noteId: "explicit-policy", noteTitle: "真实标题", comments: [{ type: "TextNote", text: "正文" }] };
+
+    const promoted = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, CONTENT_TITLE_POLICY);
+    const fixed = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, FIXED_TITLE_POLICY);
+
+    expect(promoted.title).toBe("真实标题");
+    expect(fixed.title).toBe("真实标题");
+    expect(promoted.commentText).toBe("正文");
+    expect(fixed.commentText).toBe("正文");
   });
 
   test("uses the earliest root card as tree Markdown and Canvas file name", () => {
@@ -369,8 +422,15 @@ describe("CardContentService", () => {
     loadSource(context, "src/BridgeCommandsContent.js");
 
     const commands = context.__MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon;
-    const sent = commands.previewScopeMarkdown({}, { scope: "selection" });
-    const fetched = commands.fetchCards({}, { cardIds: [note.noteId], format: "markdown" });
+    const sent = commands.previewScopeMarkdown({}, {
+      scope: "selection",
+      options: { cardTitlePolicy: CONTENT_TITLE_POLICY },
+    });
+    const fetched = commands.fetchCards({}, {
+      cardIds: [note.noteId],
+      format: "markdown",
+      cardTitlePolicy: CONTENT_TITLE_POLICY,
+    });
 
     expect(sent.markdown).toBe(fetched.markdown);
     expect(sent.markdown).toContain("正文");

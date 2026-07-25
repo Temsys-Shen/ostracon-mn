@@ -12,7 +12,10 @@ function createProps(format = "markdown") {
   return {
     connection: {
       connected: true,
-      lastHello: { payload: { cardTemplate: "{{heading}} {{title}}{{#link}} [MN]({{link}}){{/link}}\n\n{{content}}" } },
+      lastHello: { payload: {
+        cardTemplate: "{{heading}} {{title}}{{#link}} [MN]({{link}}){{/link}}\n\n{{content}}",
+        cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+      } },
     },
     prefs: { mode: "flat", includeBacklinks: true },
     format,
@@ -39,9 +42,16 @@ describe("useSend", () => {
 
     expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeMarkdown", {
       scope,
-      options: { ...props.prefs, cardTemplate: props.connection.lastHello.payload.cardTemplate },
+      options: {
+        ...props.prefs,
+        cardTemplate: props.connection.lastHello.payload.cardTemplate,
+        cardTitlePolicy: props.connection.lastHello.payload.cardTitlePolicy,
+      },
     }, 30000);
-    expect(MNBridge.send).toHaveBeenNthCalledWith(2, "listScopeCards", { scope }, 30000);
+    expect(MNBridge.send).toHaveBeenNthCalledWith(2, "listScopeCards", {
+      scope,
+      cardTitlePolicy: props.connection.lastHello.payload.cardTitlePolicy,
+    }, 30000);
     expect(ostraconWsClient.sendPacket).toHaveBeenCalledOnce();
     expect(ostraconWsClient.sendPacket.mock.calls[0][0].fileName).toBe("Example");
     expect(props.setNotice).toHaveBeenLastCalledWith("✓ 已发送 2张");
@@ -56,7 +66,10 @@ describe("useSend", () => {
 
     await act(() => result.current.send({ scope: "mindmap" }));
 
-    expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeCanvas", { scope: "mindmap", options: props.prefs }, 30000);
+    expect(MNBridge.send).toHaveBeenNthCalledWith(1, "previewScopeCanvas", {
+      scope: "mindmap",
+      options: { ...props.prefs, cardTitlePolicy: props.connection.lastHello.payload.cardTitlePolicy },
+    }, 30000);
     expect(ostraconWsClient.sendPacket.mock.calls[0][0].format).toBe("canvas");
     expect(ostraconWsClient.sendPacket.mock.calls[0][0].fileName).toBe("Brain");
   });
@@ -70,6 +83,17 @@ describe("useSend", () => {
 
     expect(props.addSendHistory).toHaveBeenCalledWith(expect.objectContaining({ ok: false, summary: "发送失败" }));
     expect(props.setNotice).toHaveBeenLastCalledWith("发送失败: 读取失败");
+  });
+
+  test("rejects a connected OB without the protocol 6 title policy", async () => {
+    const props = createProps();
+    delete props.connection.lastHello.payload.cardTitlePolicy;
+    const { result } = renderHook(() => useSend(props));
+
+    await act(() => result.current.send({ scope: "selection" }));
+
+    expect(MNBridge.send).not.toHaveBeenCalled();
+    expect(props.setNotice).toHaveBeenLastCalledWith("发送失败: OB未提供无标题策略，请更新两端插件");
   });
 });
 

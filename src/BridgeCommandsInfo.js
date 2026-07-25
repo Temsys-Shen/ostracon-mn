@@ -36,10 +36,11 @@ var __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon = (function () {
   function listCards(context, payload) {
     const notebookId = payload && payload.notebookId ? String(payload.notebookId) : "";
     const cardIds = payload && Array.isArray(payload.cardIds) ? payload.cardIds.map(String) : [];
+    const titlePolicy = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeCardTitlePolicy(payload && payload.cardTitlePolicy);
     if (cardIds.length > 0) {
       return {
         notebookId: notebookId || "card-ids",
-        cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCardsByIds(context, cardIds),
+        cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCardsByIds(context, cardIds, titlePolicy),
       };
     }
     if (!notebookId) {
@@ -48,12 +49,12 @@ var __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon = (function () {
     if (notebookId === "current-selection") {
       return {
         notebookId,
-        cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCurrentCards(context),
+        cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCurrentCards(context, titlePolicy),
       };
     }
     return {
       notebookId,
-      cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listAllCards(context, notebookId),
+      cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listAllCards(context, notebookId, titlePolicy),
     };
   }
 

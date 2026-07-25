@@ -368,9 +368,9 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  function summarizeNote(node) {
+  function summarizeNote(node, titlePolicy) {
     const note = node.note;
-    const content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+    const content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, titlePolicy);
 
     return {
       id: node.noteId,
@@ -394,9 +394,9 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     }];
   }
 
-  function listCurrentCards(context) {
+  function listCurrentCards(context, titlePolicy) {
     const selection = getSelectedCards(context);
-    return selection.flatCards.map(summarizeNote);
+    return selection.flatCards.map(function (node) { return summarizeNote(node, titlePolicy); });
   }
 
   function getNotebookScopeById(notebookId) {
@@ -446,7 +446,10 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   }
 
   function listScopeCards(context, scopeType, options) {
-    return getScopeSelection(context, scopeType, options).selection.flatCards.map(summarizeNote);
+    var titlePolicy = options && options.cardTitlePolicy;
+    return getScopeSelection(context, scopeType, options).selection.flatCards.map(function (node) {
+      return summarizeNote(node, titlePolicy);
+    });
   }
 
   function countAllNotes(notes) {
@@ -472,8 +475,8 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return result;
   }
 
-  function summarizeDbNote(note) {
-    var content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+  function summarizeDbNote(note, titlePolicy) {
+    var content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, titlePolicy);
 
     return {
       id: String(note.noteId || ""),
@@ -510,7 +513,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     });
   }
 
-  function listAllCards(context, notebookId) {
+  function listAllCards(context, notebookId, titlePolicy) {
     var db = Database.sharedInstance();
     var notebook = db.getNotebookById(notebookId);
     if (!notebook) throw new Error("未找到笔记本: " + notebookId);
@@ -518,15 +521,15 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     var rootNotes = arrayFromNSArray(notebook.notes);
     var allDbNotes = collectAllNotes(rootNotes);
 
-    return allDbNotes.map(summarizeDbNote);
+    return allDbNotes.map(function (note) { return summarizeDbNote(note, titlePolicy); });
   }
 
-  function listCardsByIds(context, cardIds) {
+  function listCardsByIds(context, cardIds, titlePolicy) {
     var db = Database.sharedInstance();
     return cardIds.map(function (noteId) {
       var note = db.getNoteById(String(noteId));
       if (!note) throw new Error("MN中未找到此卡片: " + noteId);
-      return summarizeDbNote(note);
+      return summarizeDbNote(note, titlePolicy);
     });
   }
 

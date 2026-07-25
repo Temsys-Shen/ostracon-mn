@@ -2,13 +2,15 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
   var _utils = __MN_OSTRACON_UTILS_MNOstraconAddon;
   var arrayFromNSArray = _utils.arrayFromNSArray;
   var MN_COLORS = _utils.MN_COLORS;
+  var resolveCardTitlePolicy = _utils.resolveCardTitlePolicy;
+  var sanitizeFileBaseName = _utils.sanitizeFileBaseName;
   var _contentService = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon;
   var parseNote = _contentService.parseNote;
   var resolveRootFileBaseName = _contentService.resolveRootFileBaseName;
 
   function nodeText(note, includeImages, options) {
     var lines = [];
-    var content = parseNote(note);
+    var content = parseNote(note, options.cardTitlePolicy);
 
     lines.push("## " + content.title);
     lines.push("");
@@ -237,7 +239,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
   }
 
   function buildCanvas(selectionResult, rawOptions) {
-    var options = rawOptions || {};
+    var options = { ...(rawOptions || {}), cardTitlePolicy: resolveCardTitlePolicy(rawOptions && rawOptions.cardTitlePolicy) };
     var includeImages = options.includeImages !== false;
     var flatCards = selectionResult.flatCards;
     var treeRoots = selectionResult.treeRoots;
@@ -259,6 +261,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
         width: LAYOUT_CONFIG.nodeWidth,
         height: estimateHeight(text),
         text: text,
+        ostraconMnUrl: "marginnote4app://note/" + card.noteId,
       };
       if (card.note.colorIndex >= 0) {
         node.color = MN_COLORS[card.note.colorIndex];
@@ -408,6 +411,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
             width: LAYOUT_CONFIG.nodeWidth,
             height: estimateHeight(nodeText(childNote, includeImages, options)),
             text: nodeText(childNote, includeImages, options),
+            ostraconMnUrl: "marginnote4app://note/" + uuid,
           };
           if (childNote.colorIndex >= 0) {
             childNode.color = MN_COLORS[childNote.colorIndex];
@@ -431,7 +435,7 @@ var __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon = (function () {
       canvas: JSON.stringify(canvasObj, null, 2),
       nodeCount: nodes.length,
       edgeCount: edges.length,
-      fileBaseName: selectionResult.fileBaseName || resolveRootFileBaseName(selectionResult),
+      fileBaseName: sanitizeFileBaseName(selectionResult.fileBaseName || resolveRootFileBaseName(selectionResult, options.cardTitlePolicy), "Untitled"),
     };
   }
 

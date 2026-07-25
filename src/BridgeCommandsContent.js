@@ -42,6 +42,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     const scopeResult = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getScopeSelection(context, scope, payload || {});
     const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
     const mergedPrefs = { ...prefs, ...(payload && payload.options ? payload.options : payload || {}) };
+    mergedPrefs.cardTitlePolicy = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeCardTitlePolicy(mergedPrefs.cardTitlePolicy);
     const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(scopeResult.selection, mergedPrefs);
     return {
       scope,
@@ -58,6 +59,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     const scope = normalizeScopeType(payload);
     const scopeResult = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getScopeSelection(context, scope, payload || {});
     const options = { ...(payload && payload.options ? payload.options : {}), ...(payload || {}) };
+    options.cardTitlePolicy = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeCardTitlePolicy(options.cardTitlePolicy);
     const result = __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(scopeResult.selection, options);
     return {
       scope,
@@ -73,11 +75,12 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
   function listScopeCards(context, payload) {
     const scope = normalizeScopeType(payload);
     const scopeResult = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getScopeSelection(context, scope, payload || {});
+    const titlePolicy = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeCardTitlePolicy(payload && payload.cardTitlePolicy);
     return {
       scope,
       scopeId: scopeResult.id,
       scopeTitle: scopeResult.title,
-      cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listScopeCards(context, scope, payload || {}),
+      cards: __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listScopeCards(context, scope, { ...(payload || {}), cardTitlePolicy: titlePolicy }),
     };
   }
 
@@ -87,11 +90,12 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
       throw new Error("缺少要拉取的卡片");
     }
 
+    const titlePolicy = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeCardTitlePolicy(payload && payload.cardTitlePolicy);
     const selection = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getCardsByIds(cardIds);
-    const cards = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCardsByIds(context, cardIds);
+    const cards = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.listCardsByIds(context, cardIds, titlePolicy);
     const format = payload && payload.format === "canvas" ? "canvas" : "markdown";
     if (format === "canvas") {
-      const canvas = __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, {});
+      const canvas = __MN_CANVAS_EXPORT_SERVICE_MNOstraconAddon.buildCanvas(selection, { cardTitlePolicy: titlePolicy });
       return {
         format,
         canvas: canvas.canvas,
@@ -102,7 +106,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     }
 
     const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
-    const options = { ...prefs, cardTemplate: payload && payload.cardTemplate };
+    const options = { ...prefs, cardTemplate: payload && payload.cardTemplate, cardTitlePolicy: titlePolicy };
     const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, options);
     return {
       format,

@@ -4,7 +4,7 @@ import { createId, nowIso } from "./idUtils";
 import { MN_CMD } from "./commands";
 
 const DEFAULT_PORT = 27123;
-const PROTOCOL_VERSION = 5;
+const PROTOCOL_VERSION = 6;
 const OPEN_MARGIN_NOTE_URL_CAPABILITY = "open_marginnote_url";
 const PLUGIN_ID = "ostracon-mn";
 const EXPECTED_SERVER_PLUGIN_ID = "ostracon-ob";

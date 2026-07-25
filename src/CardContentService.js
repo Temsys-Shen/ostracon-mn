@@ -3,6 +3,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
   var normalizeText = _utils.normalizeText;
   var arrayFromNSArray = _utils.arrayFromNSArray;
   var getNoteId = _utils.getNoteId;
+  var resolveCardTitlePolicy = _utils.resolveCardTitlePolicy;
   var renderDrawingDataURI = __MN_INK_DRAWING_SERVICE_MNOstraconAddon.renderDrawingDataURI;
   var convertHtml = __MN_HTML_COMPATIBILITY_SERVICE_MNOstraconAddon.convertHtml;
   var MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(marginnote4app:\/\/markdownimg\/(png|jpeg)\/([^\s)]+)\)/g;
@@ -152,13 +153,9 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  function resolveFileBaseName(note) {
+  function resolveFileBaseName(note, titlePolicy) {
     if (!note) return "Untitled";
-    var title = normalizeText(note.noteTitle);
-    if (title) return title;
-    var excerpt = normalizeText(note.excerptText).replace(/\s+/g, " ");
-    if (excerpt) return excerpt.slice(0, 40).trim();
-    return "Untitled";
+    return parseNote(note, titlePolicy).title || "Untitled";
   }
 
   function resolveEarliestRootNote(selectionResult) {
@@ -179,14 +176,15 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     return earliest.note;
   }
 
-  function resolveRootFileBaseName(selectionResult) {
+  function resolveRootFileBaseName(selectionResult, titlePolicy) {
     var note = resolveEarliestRootNote(selectionResult);
-    return note ? resolveFileBaseName(note) : "Untitled";
+    return note ? resolveFileBaseName(note, titlePolicy) : "Untitled";
   }
 
-  function parseNote(note) {
+  function parseNote(note, rawTitlePolicy) {
     if (!note) throw new Error("缺少MN卡片对象");
 
+    var titlePolicy = resolveCardTitlePolicy(rawTitlePolicy);
     var noteId = getNoteId(note) || "unknown";
     var rawComments = arrayFromNSArray(note.comments);
     var title = normalizeText(note.noteTitle);
@@ -215,7 +213,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
 
       if (type === "TextNote") {
         var tokenized = tokenizeTextComment(noteId, comment, index);
-        var consumeTitle = !title && Boolean(tokenized.title);
+        var consumeTitle = titlePolicy.useContentAsTitle && !title && Boolean(tokenized.title);
         if (consumeTitle) {
           title = tokenized.title;
           titleSourceIndex = index;
@@ -284,7 +282,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
           text: excerptText,
           markdown: Number(note.excerptTextMarkdown) === 1,
         }, -1);
-        var consumeExcerptTitle = !title && Boolean(tokenizedExcerpt.title);
+        var consumeExcerptTitle = titlePolicy.useContentAsTitle && !title && Boolean(tokenizedExcerpt.title);
         if (consumeExcerptTitle) {
           title = tokenizedExcerpt.title;
           titleSourceIndex = -1;
@@ -349,7 +347,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
 
     return {
       noteId: noteId,
-      title: title || "无标题卡片",
+      title: title || titlePolicy.untitledTitle,
       titleSourceIndex: titleSourceIndex,
       comments: comments,
       commentText: excerptTexts.concat(commentTexts).join("\n\n"),
