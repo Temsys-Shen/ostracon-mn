@@ -153,9 +153,9 @@ body {
   .document-preview { display: none; }.vault-browser.has-preview .browser-list-pane { display: none; }.vault-browser.has-preview .document-preview { display: flex; }
   .preview-back { display: inline-flex; flex: 0 0 auto; }.browser-list-pane { visibility: visible; overflow: auto; border-right: 0; }.sidebar-resizer, .sidebar-collapse, .sidebar-expand { display: none; }
   .browser-body.sidebar-collapsed .preview-header { padding-left: 14px; }
-  .insert-bar { align-items: stretch; gap: 8px; padding: 8px 10px; flex-direction: column; }
+  .insert-bar { align-items: center; gap: 8px; padding: 8px 10px; }
   .insert-target { min-width: 0; }
-  .insert-actions { width: 100%; justify-content: flex-end; gap: 8px; }
+  .insert-actions { width: auto; flex: 0 0 auto; justify-content: flex-end; gap: 8px; white-space: nowrap; }
   .document-import-actions { padding-left: 8px; }
   .insert-actions button { padding: 0 10px; }
 }
