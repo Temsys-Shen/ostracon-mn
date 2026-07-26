@@ -431,11 +431,20 @@ describe("CardContentService", () => {
       format: "markdown",
       cardTitlePolicy: CONTENT_TITLE_POLICY,
     });
+    const canvasFetched = commands.fetchCards({}, {
+      cardIds: [note.noteId],
+      format: "markdown",
+      cardTemplate: OB_CARD_TEMPLATE,
+      includeBacklinks: false,
+      cardTitlePolicy: CONTENT_TITLE_POLICY,
+    });
 
     expect(sent.markdown).toBe(fetched.markdown);
     expect(sent.markdown).toContain("正文");
     expect(sent.markdown).toContain("data:image/png;base64,U0hBUkVE");
     expect(sent.markdown).toContain("data:image/svg+xml;base64,");
+    expect(canvasFetched.markdown).not.toContain("marginnote4app://note/note-4");
+    expect(canvasFetched.markdown).not.toContain("assets/logo.png");
   });
 
   test("uses the image excerpt instead of OCR text when textFirst is disabled", () => {

@@ -21,6 +21,35 @@ function createService(notes, title = "学习集") {
   return context.__MN_CARD_SELECTION_SERVICE_MNOstraconAddon;
 }
 
+function createSelectionInfoService(selectedViews) {
+  const context = vm.createContext({
+    Application: {
+      sharedInstance: () => ({
+        studyController: () => ({
+          notebookController: { mindmapView: { selViewLst: selectedViews } },
+        }),
+      }),
+    },
+  });
+  const source = fs.readFileSync(path.join(rootDir, "src/CardSelectionService.js"), "utf8");
+  vm.runInContext(source, context, { filename: "CardSelectionService.js" });
+  return context.__MN_CARD_SELECTION_SERVICE_MNOstraconAddon;
+}
+
+describe("CardSelectionService selected-card info", () => {
+  test("returns zero counts after all cards are deselected", () => {
+    const info = createSelectionInfoService([]).getSelectedCardsInfo({ addon: { window: {} } });
+
+    expect(info).toEqual({
+      noteCount: 0,
+      imageCount: 0,
+      commentCount: 0,
+      sourceTitle: "",
+      noteIds: [],
+    });
+  });
+});
+
 describe("CardSelectionService notebook scope", () => {
   test("deduplicates an all-notes collection and keeps one three-level tree", () => {
     const grandchild = note("grandchild");

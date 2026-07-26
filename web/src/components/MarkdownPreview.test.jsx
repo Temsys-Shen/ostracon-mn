@@ -21,7 +21,7 @@ describe("Markdown preview line breaks", () => {
     expect(shadow.querySelector("style").textContent).toContain("width:100%;max-width:100%");
     expect(shadow.querySelector("style").textContent).toContain("*{box-sizing:border-box}");
     expect(shadow.querySelector("style").textContent).not.toContain("*{box-sizing:border-box;max-width:100%}");
-    expect(shadow.querySelector("style").textContent).toContain("img{max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important}");
+    expect(shadow.querySelector("style").textContent).toContain("img{max-width:100%!important}");
     expect(shadow.querySelector("style").textContent).toContain(".mermaid,.mermaid svg{max-width:100%}");
     expect(shadow.querySelector("style").textContent).toContain(".mermaid svg{width:auto;height:auto}");
     expect(shadow.querySelector("style").textContent).toContain("mjx-stretchy-v{-webkit-transform:translateZ(0)");

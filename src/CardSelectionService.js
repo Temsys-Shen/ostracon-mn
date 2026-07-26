@@ -348,7 +348,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
 
   function getSelectedCardsInfo(context) {
     const items = arrayFromNSArray(getSelectedViews(context));
-    const indexed = indexSelectedNodes(items);
+    const indexed = indexSelectedNodes(items, true);
     const firstCard = indexed.orderedNodes[0];
     const note = firstCard ? firstCard.note : null;
     let totalComments = 0;

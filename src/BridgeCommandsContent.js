@@ -106,7 +106,12 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     }
 
     const prefs = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadPrefs();
-    const options = { ...prefs, cardTemplate: payload && payload.cardTemplate, cardTitlePolicy: titlePolicy };
+    const options = {
+      ...prefs,
+      cardTemplate: payload && payload.cardTemplate,
+      cardTitlePolicy: titlePolicy,
+      includeBacklinks: payload && payload.includeBacklinks,
+    };
     const result = __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selection, options);
     return {
       format,
