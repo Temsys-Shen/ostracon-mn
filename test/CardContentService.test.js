@@ -148,6 +148,19 @@ describe("CardContentService", () => {
     expect(() => service.buildMarkdown(selectionFor(note), { cardTemplate: "{{title|link}}" })).toThrow("未知卡片模板过滤器: link");
   });
 
+  test("renders title condition blocks including an empty-title branch", () => {
+    const context = createRuntime();
+    const service = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon;
+    const note = { noteId: "empty-title", noteTitle: "", excerptText: "", comments: [] };
+    const cardTitlePolicy = { useContentAsTitle: false, untitledTitle: "" };
+    const template = "{{#title}}{{heading}} {{title}}{{/title}}{{^title}}{{heading}} 无标题占位{{/title}}\n\n{{content}}";
+
+    const markdown = service.buildMarkdown(selectionFor(note), { cardTemplate: template, cardTitlePolicy }).markdown;
+
+    expect(markdown).toContain("## 无标题占位");
+    expect(markdown).not.toContain("无标题卡片");
+  });
+
   test("keeps every text comment when noteTitle is explicit", () => {
     const context = createRuntime();
     const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote({
@@ -217,6 +230,27 @@ describe("CardContentService", () => {
     expect(markdown).toContain("第一行\n第二行");
     expect(canvas.nodes[0].text).toContain("## 未命名");
     expect(canvas.nodes[0].text).toContain("第一行\n第二行");
+  });
+
+  test("allows an empty fixed untitled title", () => {
+    const context = createRuntime();
+    const note = {
+      noteId: "empty-fixed-untitled",
+      noteTitle: "",
+      excerptText: "摘录正文",
+      comments: [],
+    };
+    const policy = { useContentAsTitle: false, untitledTitle: "" };
+
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, policy);
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), {
+      cardTemplate: "{{#title}}{{heading}} {{title}}{{/title}}{{^title}}{{content}}{{/title}}",
+      cardTitlePolicy: policy,
+    });
+
+    expect(content.title).toBe("");
+    expect(markdown.markdown).toBe("摘录正文\n");
+    expect(markdown.fileBaseName).toBe("Untitled");
   });
 
   test("keeps explicit note titles under both title policies", () => {

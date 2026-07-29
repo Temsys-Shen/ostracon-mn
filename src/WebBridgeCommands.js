@@ -26,11 +26,26 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     return { ok: true, message: "discovery started" };
   }
 
+  function syncNativeMiniState(context, payload) {
+    if (payload && payload.connected !== true && context.controller._isMini) {
+      context.controller.forceFullModeForDisconnected();
+    }
+    __MN_NATIVE_MINI_SURFACE_MNOstraconAddon.updateState(context.controller, payload);
+    return { synced: true };
+  }
+
+  function syncNativeMiniFiles(context, payload) {
+    __MN_NATIVE_MINI_SURFACE_MNOstraconAddon.updateFiles(context.controller, payload);
+    return { synced: true };
+  }
+
   const commands = {
     ping,
     echo,
     closePanel,
     discoverServers,
+    syncNativeMiniState,
+    syncNativeMiniFiles,
     openMarginNoteUrl: __MN_MARGIN_NOTE_URL_SERVICE_MNOstraconAddon.open,
     getMarkdownPreferences: __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.getMarkdownPreferences,
     setMarkdownPreferences: __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.setMarkdownPreferences,
@@ -52,6 +67,11 @@ var __MN_WEB_BRIDGE_COMMANDS_MNOstraconAddon = (function () {
     getQuoteRootState: __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.getQuoteRootState,
     selectQuoteRootFromCurrentSelection: __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.selectQuoteRootFromCurrentSelection,
     clearQuoteRoot: __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.clearQuoteRoot,
+    startContinuousQuoteSession: __MN_CONTINUOUS_QUOTE_SERVICE_MNOstraconAddon.startSession,
+    addContinuousQuoteSelection: __MN_CONTINUOUS_QUOTE_SERVICE_MNOstraconAddon.addSelection,
+    cancelContinuousQuoteSession: __MN_CONTINUOUS_QUOTE_SERVICE_MNOstraconAddon.cancelSession,
+    finishContinuousQuoteSession: __MN_CONTINUOUS_QUOTE_SERVICE_MNOstraconAddon.finishSession,
+    getContinuousQuoteSessionState: __MN_CONTINUOUS_QUOTE_SERVICE_MNOstraconAddon.getState,
     getObsidianInsertContext: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.getInsertContext,
     createObsidianImportSession: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.createSession,
     appendObsidianImportChunk: __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon.appendChunk,

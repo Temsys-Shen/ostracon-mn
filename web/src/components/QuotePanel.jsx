@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileDown, FileText, Folder, FolderSearch, Search, TextCursorInput, X } from "lucide-react";
+import { ArrowLeft, Check, FileDown, FileText, Folder, FolderSearch, ListPlus, Play, Search, TextCursorInput, Trash2, X } from "lucide-react";
 import ostraconWsClient from "../lib/ostraconWsClient";
 import { useQuote } from "../hooks/useQuote";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
@@ -48,12 +48,18 @@ function SelectionPreview({ selection }) {
 }
 
 function QuotePanelView({ quote }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerMode, setPickerMode] = useState("");
   const disabled = !quote.selection || Boolean(quote.busyTarget);
+  const continuousActive = quote.continuous?.active === true;
+  const continuousCount = quote.continuous?.items?.length || 0;
+  const continuousDisabled = Boolean(quote.busyTarget);
+  const finishDisabled = continuousDisabled || continuousCount === 0;
 
   const chooseFile = async (filePath) => {
-    setPickerOpen(false);
-    await quote.insert("file", filePath);
+    const mode = pickerMode;
+    setPickerMode("");
+    if (mode === "continuous") await quote.finishContinuous("file", filePath);
+    else await quote.insert("file", filePath);
   };
 
   return (
@@ -62,18 +68,41 @@ function QuotePanelView({ quote }) {
       {quote.error && <div className="quote-inline-error">{quote.error}</div>}
 
       <div className="quote-actions">
-        <button disabled={disabled || !quote.context.cursor.available} onClick={() => void quote.insert("cursor")} type="button"><TextCursorInput size={17} /><span>{quote.busyTarget === "cursor" ? "插入中..." : "插入光标"}</span></button>
-        <button disabled={disabled || !quote.context.activeFile.available} onClick={() => void quote.insert("active-file")} type="button"><FileDown size={17} /><span>{quote.busyTarget === "active-file" ? "追加中..." : "追加当前"}</span></button>
-        <button disabled={disabled} onClick={() => setPickerOpen(true)} type="button"><FolderSearch size={17} /><span>选择文件</span></button>
+        {continuousActive ? (
+          <>
+            <button disabled={finishDisabled || !quote.context.cursor.available} onClick={() => void quote.finishContinuous("cursor")} type="button"><TextCursorInput size={17} /><span>{quote.busyTarget === "continuous-cursor" ? "完成中..." : "完成光标"}</span></button>
+            <button disabled={finishDisabled || !quote.context.activeFile.available} onClick={() => void quote.finishContinuous("active-file")} type="button"><FileDown size={17} /><span>{quote.busyTarget === "continuous-active-file" ? "完成中..." : "完成当前"}</span></button>
+            <button disabled={finishDisabled} onClick={() => setPickerMode("continuous")} type="button"><FolderSearch size={17} /><span>完成文件</span></button>
+          </>
+        ) : (
+          <>
+            <button disabled={disabled || !quote.context.cursor.available} onClick={() => void quote.insert("cursor")} type="button"><TextCursorInput size={17} /><span>{quote.busyTarget === "cursor" ? "插入中..." : "插入光标"}</span></button>
+            <button disabled={disabled || !quote.context.activeFile.available} onClick={() => void quote.insert("active-file")} type="button"><FileDown size={17} /><span>{quote.busyTarget === "active-file" ? "追加中..." : "追加当前"}</span></button>
+            <button disabled={disabled} onClick={() => setPickerMode("quote")} type="button"><FolderSearch size={17} /><span>选择文件</span></button>
+          </>
+        )}
+      </div>
+
+      <div className="quote-continuous">
+        <div><small>连续摘录</small><strong>{continuousActive ? `${continuousCount}条` : "未开始"}</strong></div>
+        {continuousActive ? (
+          <>
+            <button disabled={continuousDisabled || !quote.selection} onClick={() => void quote.addContinuousSelection()} type="button"><ListPlus size={15} /><span>{quote.busyTarget === "continuous-add" ? "加入中..." : "加入"}</span></button>
+            <button disabled={continuousDisabled} onClick={() => void quote.cancelContinuous()} type="button"><Trash2 size={15} /><span>取消</span></button>
+          </>
+        ) : (
+          <button disabled={Boolean(quote.busyTarget)} onClick={() => void quote.startContinuous()} type="button"><Play size={15} /><span>开始</span></button>
+        )}
+        {continuousActive && continuousCount > 0 && <Check size={15} className="quote-continuous-check" />}
       </div>
 
       <div className="quote-root-setting">
-        <div><small>卡片根节点</small><strong>{quote.root?.title || "当前学习集"}</strong></div>
+        <div><small>同级节点</small><strong>{quote.root?.title || "当前学习集"}</strong></div>
         <button className={quote.rootSelectionStatus === "waiting" ? "waiting" : ""} onClick={() => void quote.toggleRootSelection()} type="button">{quote.rootSelectionStatus === "waiting" ? "等待选择..." : "选择卡片"}</button>
-        {quote.root && <button className="icon-button" onClick={() => void quote.clearRoot()} title="清除根节点" type="button"><X size={15} /></button>}
+        {quote.root && <button className="icon-button" onClick={() => void quote.clearRoot()} title="清除同级节点" type="button"><X size={15} /></button>}
       </div>
 
-      {pickerOpen && <QuoteFilePicker onChoose={chooseFile} onClose={() => setPickerOpen(false)} />}
+      {pickerMode && <QuoteFilePicker onChoose={chooseFile} onClose={() => setPickerMode("")} />}
     </section>
   );
 }

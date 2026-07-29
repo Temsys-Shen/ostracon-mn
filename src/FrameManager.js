@@ -1,12 +1,20 @@
 var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
   const FRAME_CONFIG_KEY = "mn_web_template_mnostraconaddon_frame_config";
+  const MINI_FRAME_CONFIG_KEY = "mn_web_template_mnostraconaddon_mini_frame_config";
+  const PANEL_MODE_KEY = "mn_web_template_mnostraconaddon_panel_mode";
   const PANEL_ON_KEY = "mn_web_template_mnostraconaddon_panel_on";
 
-  const MIN_WIDTH = 520;
-  const MIN_HEIGHT = 420;
-  const DEFAULT_WIDTH = 960;
-  const DEFAULT_HEIGHT = 640;
+  const MIN_WIDTH = 260;
+  const MIN_HEIGHT = 660;
+  const MINI_MIN_WIDTH = 240;
+  const MINI_MIN_HEIGHT = 32;
+  const MINI_DEFAULT_WIDTH = 240;
+  const MINI_DEFAULT_HEIGHT = 32;
+  const DEFAULT_WIDTH = 480;
+  const DEFAULT_HEIGHT = 660;
   const PANEL_MARGIN = 16;
+  const PANEL_MODE_FULL = "full";
+  const PANEL_MODE_MINI = "mini";
 
   function numberOr(value, fallback) {
     var number = Number(value);
@@ -24,7 +32,7 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
 
   function createDefaultFrame(bounds) {
     var safeBounds = normalizeBounds(bounds);
-    var maxWidth = Math.max(320, safeBounds.width - PANEL_MARGIN * 2);
+    var maxWidth = Math.max(MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2);
     var maxHeight = Math.max(260, safeBounds.height - PANEL_MARGIN * 2);
     var width = Math.min(DEFAULT_WIDTH, maxWidth);
     var height = Math.min(DEFAULT_HEIGHT, maxHeight);
@@ -32,6 +40,21 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
     return {
       x: safeBounds.x + Math.max(PANEL_MARGIN, (safeBounds.width - width) / 2),
       y: safeBounds.y + Math.max(PANEL_MARGIN, (safeBounds.height - height) / 2),
+      width: width,
+      height: height,
+    };
+  }
+
+  function createMiniFrame(bounds) {
+    var safeBounds = normalizeBounds(bounds);
+    var maxWidth = Math.max(MINI_MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2);
+    var maxHeight = Math.max(MINI_MIN_HEIGHT, safeBounds.height - PANEL_MARGIN * 2);
+    var width = Math.min(MINI_DEFAULT_WIDTH, maxWidth);
+    var height = Math.min(MINI_DEFAULT_HEIGHT, maxHeight);
+
+    return {
+      x: safeBounds.x + Math.max(PANEL_MARGIN, safeBounds.width - width - PANEL_MARGIN),
+      y: safeBounds.y + Math.max(PANEL_MARGIN, safeBounds.height - height - PANEL_MARGIN),
       width: width,
       height: height,
     };
@@ -46,14 +69,21 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
       frame.height >= safeBounds.height - PANEL_MARGIN;
   }
 
-  function normalizePanelFrame(frame, bounds) {
+  function normalizePanelFrame(frame, bounds, mode) {
     var safeBounds = normalizeBounds(bounds);
-    var fallback = createDefaultFrame(safeBounds);
+    var isMini = mode === PANEL_MODE_MINI;
+    var fallback = isMini ? createMiniFrame(safeBounds) : createDefaultFrame(safeBounds);
     var source = frame || fallback;
-    var maxWidth = Math.max(320, safeBounds.width - PANEL_MARGIN * 2);
-    var maxHeight = Math.max(260, safeBounds.height - PANEL_MARGIN * 2);
-    var width = Math.min(Math.max(MIN_WIDTH, numberOr(source.width, fallback.width)), maxWidth);
-    var height = Math.min(Math.max(MIN_HEIGHT, numberOr(source.height, fallback.height)), maxHeight);
+    var maxWidth = isMini
+      ? Math.min(MINI_DEFAULT_WIDTH, Math.max(MINI_MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2))
+      : Math.min(DEFAULT_WIDTH, Math.max(MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2));
+    var maxHeight = isMini
+      ? Math.min(MINI_DEFAULT_HEIGHT, Math.max(MINI_MIN_HEIGHT, safeBounds.height - PANEL_MARGIN * 2))
+      : Math.max(260, safeBounds.height - PANEL_MARGIN * 2);
+    var minWidth = isMini ? MINI_MIN_WIDTH : MIN_WIDTH;
+    var minHeight = isMini ? MINI_MIN_HEIGHT : MIN_HEIGHT;
+    var width = Math.min(Math.max(minWidth, numberOr(source.width, fallback.width)), maxWidth);
+    var height = Math.min(Math.max(minHeight, numberOr(source.height, fallback.height)), maxHeight);
     var minX = safeBounds.x + PANEL_MARGIN;
     var minY = safeBounds.y + PANEL_MARGIN;
     var maxX = safeBounds.x + Math.max(PANEL_MARGIN, safeBounds.width - width - PANEL_MARGIN);
@@ -101,7 +131,26 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
       width: frame.width,
       height: frame.height,
     };
-    NSUserDefaults.standardUserDefaults().setObjectForKey(config, FRAME_CONFIG_KEY);
+    NSUserDefaults.standardUserDefaults().setObjectForKey(config, controller._isMini ? MINI_FRAME_CONFIG_KEY : FRAME_CONFIG_KEY);
+  }
+
+  function savePanelMode(mode) {
+    if (mode !== PANEL_MODE_MINI && mode !== PANEL_MODE_FULL) throw new Error("Unsupported panel mode: " + mode);
+    NSUserDefaults.standardUserDefaults().setObjectForKey(mode, PANEL_MODE_KEY);
+  }
+
+  function loadPanelMode() {
+    var mode = NSUserDefaults.standardUserDefaults().objectForKey(PANEL_MODE_KEY);
+    return mode === PANEL_MODE_MINI ? PANEL_MODE_MINI : PANEL_MODE_FULL;
+  }
+
+  function hasValidFrameFields(frame) {
+    if (!frame) return false;
+    if (frame.x === undefined || frame.y === undefined || frame.width === undefined || frame.height === undefined) return false;
+    return Number.isFinite(Number(frame.x)) &&
+      Number.isFinite(Number(frame.y)) &&
+      Number.isFinite(Number(frame.width)) &&
+      Number.isFinite(Number(frame.height));
   }
 
   function applyDefaultFrame(controller) {
@@ -111,34 +160,21 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
 
   function applySavedOrDefaultFrame(controller) {
     var bounds = getStudyRootBounds(controller);
-    var saved = NSUserDefaults.standardUserDefaults().objectForKey(FRAME_CONFIG_KEY);
+    var mode = loadPanelMode();
+    controller._isMini = mode === PANEL_MODE_MINI;
+    var saved = NSUserDefaults.standardUserDefaults().objectForKey(controller._isMini ? MINI_FRAME_CONFIG_KEY : FRAME_CONFIG_KEY);
 
     if (!saved || isFullscreenLike(saved, bounds)) {
-      applyDefaultFrame(controller);
+      applyRootFrame(controller, controller._isMini ? createMiniFrame(bounds) : createDefaultFrame(bounds), true);
       return;
     }
 
-    var x = saved.x;
-    var y = saved.y;
-    var width = saved.width;
-    var height = saved.height;
-
-    if (x === undefined || y === undefined || width === undefined || height === undefined) {
-      applyDefaultFrame(controller);
+    if (!hasValidFrameFields(saved)) {
+      applyRootFrame(controller, controller._isMini ? createMiniFrame(bounds) : createDefaultFrame(bounds), true);
       return;
     }
 
-    if (
-      !Number.isFinite(Number(x)) ||
-      !Number.isFinite(Number(y)) ||
-      !Number.isFinite(Number(width)) ||
-      !Number.isFinite(Number(height))
-    ) {
-      applyDefaultFrame(controller);
-      return;
-    }
-
-    applyRootFrame(controller, normalizePanelFrame({ x: x, y: y, width: width, height: height }, bounds), true);
+    applyRootFrame(controller, normalizePanelFrame(saved, bounds, mode), true);
   }
 
   function keepPanelWithinStudyBounds(controller) {
@@ -154,7 +190,7 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
     }
 
     var preferred = controller._preferredFrame || controller.view.frame || createDefaultFrame(bounds);
-    var normalized = normalizePanelFrame(preferred, bounds);
+    var normalized = normalizePanelFrame(preferred, bounds, controller._isMini ? PANEL_MODE_MINI : PANEL_MODE_FULL);
     if (!framesEqual(controller.view.frame, normalized)) {
       applyRootFrame(controller, normalized, false);
     }
@@ -162,6 +198,7 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
 
   return {
     createDefaultFrame: createDefaultFrame,
+    createMiniFrame: createMiniFrame,
     normalizePanelFrame: normalizePanelFrame,
     applyRootFrame: applyRootFrame,
     getStudyRootBounds: getStudyRootBounds,
@@ -169,11 +206,18 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
     applyDefaultFrame: applyDefaultFrame,
     applySavedOrDefaultFrame: applySavedOrDefaultFrame,
     keepPanelWithinStudyBounds: keepPanelWithinStudyBounds,
+    savePanelMode: savePanelMode,
+    loadPanelMode: loadPanelMode,
     DEFAULT_WIDTH: DEFAULT_WIDTH,
     DEFAULT_HEIGHT: DEFAULT_HEIGHT,
     MIN_WIDTH: MIN_WIDTH,
     MIN_HEIGHT: MIN_HEIGHT,
+    MINI_MIN_WIDTH: MINI_MIN_WIDTH,
+    MINI_MIN_HEIGHT: MINI_MIN_HEIGHT,
+    PANEL_MODE_FULL: PANEL_MODE_FULL,
+    PANEL_MODE_MINI: PANEL_MODE_MINI,
     PANEL_MARGIN: PANEL_MARGIN,
     PANEL_ON_KEY: PANEL_ON_KEY,
+    PANEL_MODE_KEY: PANEL_MODE_KEY,
   };
 })();

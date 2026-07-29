@@ -95,6 +95,20 @@ describe("useSend", () => {
     expect(MNBridge.send).not.toHaveBeenCalled();
     expect(props.setNotice).toHaveBeenLastCalledWith("发送失败: OB未提供无标题策略，请更新两端插件");
   });
+
+  test("accepts an empty untitled title policy from OB", async () => {
+    MNBridge.send
+      .mockResolvedValueOnce({ markdown: "# Example", noteCount: 1, fileBaseName: "Example", scopeTitle: "Example" })
+      .mockResolvedValueOnce({ cards: [{ id: "card-1", title: "" }] });
+    const props = createProps();
+    props.connection.lastHello.payload.cardTitlePolicy.untitledTitle = "";
+    const { result } = renderHook(() => useSend(props));
+
+    await act(() => result.current.send({ scope: "notebook" }));
+
+    expect(MNBridge.send).toHaveBeenCalled();
+    expect(props.setNotice).toHaveBeenLastCalledWith("✓ 已发送 1张");
+  });
 });
 
 describe("isSendDisabled", () => {

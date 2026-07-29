@@ -74,14 +74,26 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     var tokenPattern = /{{([\s\S]*?)}}/g;
     var output = "";
     var cursor = 0;
-    var insideLink = false;
+    var conditionBlock = null;
     var match;
     while ((match = tokenPattern.exec(template)) !== null) {
-      if (!insideLink || context.link) output += template.slice(cursor, match.index);
       var expression = match[1].trim();
-      if (expression === "#link") insideLink = true;
-      else if (expression === "/link") insideLink = false;
-      else if (!insideLink || context.link) {
+      var shouldRender = !conditionBlock || conditionBlock.render;
+      if (shouldRender) output += template.slice(cursor, match.index);
+      if (expression === "#link" || expression === "#title" || expression === "^title") {
+        if (conditionBlock) throw new Error("卡片模板不支持嵌套条件块");
+        var conditionName = expression.slice(1);
+        conditionBlock = {
+          name: conditionName,
+          render: expression.charAt(0) === "^" ? !context[conditionName] : Boolean(context[conditionName]),
+        };
+      } else if (expression === "/link" || expression === "/title") {
+        if (!conditionBlock) throw new Error("卡片模板存在多余的{{" + expression + "}}");
+        if (conditionBlock.name !== expression.slice(1)) throw new Error("卡片模板条件块闭合不匹配: " + expression);
+        conditionBlock = null;
+      } else if (expression.startsWith("#") || expression.startsWith("/") || expression.startsWith("^")) {
+        throw new Error("未知卡片模板条件块: " + expression);
+      } else if (shouldRender) {
         var parts = expression.split("|").map(function (part) { return part.trim(); });
         var variable = parts.shift();
         if (variable !== "content" && variable !== "title" && variable !== "heading" && variable !== "link") throw new Error("未知卡片模板变量: " + variable);
@@ -95,7 +107,10 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
       }
       cursor = tokenPattern.lastIndex;
     }
-    if (insideLink) throw new Error("卡片模板缺少{{/link}}");
+    if (conditionBlock) throw new Error("卡片模板缺少{{/" + conditionBlock.name + "}}");
+    if (template.slice(cursor).includes("{{") || template.slice(cursor).includes("}}")) {
+      throw new Error("卡片模板包含未闭合语法");
+    }
     output += template.slice(cursor);
     return output.trim();
   }
@@ -152,7 +167,23 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  function buildQuoteContent(selectionResult, rawOptions) {
+    var options = normalizeOptions(rawOptions);
+    var warnings = createWarningBag();
+    var cards = getCardsByMode(selectionResult, options.mode);
+    if (cards.length !== 1) throw new Error("连续摘录只能渲染一张主卡");
+    var rendered = renderNote(cards[0], options, warnings);
+    return {
+      content: rendered.content,
+      link: rendered.link,
+      title: rendered.title,
+      heading: rendered.heading,
+      warnings: warnings.items,
+    };
+  }
+
   return {
     buildMarkdown,
+    buildQuoteContent,
   };
 })();

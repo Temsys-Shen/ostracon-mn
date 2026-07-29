@@ -39,7 +39,7 @@ const useBridgeStore = create((set) => ({
   // cardsInfo: getSelectedCardsInfo 返回值（含 noteCount/imageCount/commentCount/sourceTitle/noteIds）
   // insertContext: getObsidianInsertContext 返回值（含 notebookId/notebookTitle/selectedCount/targetKind/targetTitle）
   // quoteSelection: getQuoteSelectionPreview 返回值（文本/图片选区）
-  // quoteRoot: getQuoteRootState 返回值（引文根节点）
+  // quoteRoot: getQuoteRootState 返回值（引文同级节点）
   // quoteContext: getQuoteContext 返回值（OB 端光标/活动文件上下文）
   selection: {
     cardsInfo: null,

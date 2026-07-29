@@ -1,14 +1,20 @@
 var __MN_WEB_API_MNOstraconAddon = (function () {
   var _fm = __MN_FRAME_MANAGER_MNOstraconAddon;
   var _bd = __MN_BRIDGE_DISPATCHER_MNOstraconAddon;
+  var _mini = __MN_NATIVE_MINI_SURFACE_MNOstraconAddon;
 
   const TITLE_HEIGHT = 32;
   const TITLE_HORIZONTAL_PADDING = 14;
   const CLOSE_BUTTON_SIZE = 24;
+  const MINI_BUTTON_SIZE = 24;
   const CLOSE_BUTTON_MARGIN = 4;
   const RESIZE_HANDLE_SIZE = 32;
   const WINDOW_CORNER_RADIUS = 14;
   const NAVIGATION_TYPE_LINK_CLICKED = 0;
+  const PANEL_TRANSITION_DURATION = 0.22;
+  const PANEL_POSITION_ANIMATION_KEY = "ostracon-panel-position";
+  const PANEL_BOUNDS_ANIMATION_KEY = "ostracon-panel-bounds";
+  const PANEL_CORNER_ANIMATION_KEY = "ostracon-panel-corner";
 
   const WINDOW_BACKGROUND = UIColor.colorWithRedGreenBlueAlpha(247 / 255, 248 / 255, 250 / 255, 1);
   const TITLE_COLOR = UIColor.colorWithRedGreenBlueAlpha(37 / 255, 42 / 255, 52 / 255, 1);
@@ -34,6 +40,7 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
   }
 
   function performCloseWindow(controller) {
+    _mini.dismissPopovers(controller);
     controller.view.hidden = true;
     NSUserDefaults.standardUserDefaults().setObjectForKey(false, _fm.PANEL_ON_KEY);
     NSTimer.scheduledTimerWithTimeInterval(0, false, function () {
@@ -49,13 +56,16 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.containerView.layer.borderWidth = controller._isMaximized ? 0 : 1;
     controller.containerView.frame = { x: 0, y: 0, width: frame.width, height: frame.height };
     controller.titleBar.frame = { x: 0, y: 0, width: frame.width, height: TITLE_HEIGHT };
-    controller.dragRegion.frame = { x: 0, y: 0, width: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2), height: TITLE_HEIGHT };
+    controller.dragRegion.frame = { x: 0, y: 0, width: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - MINI_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 3), height: TITLE_HEIGHT };
     controller.titleLabel.frame = { x: TITLE_HORIZONTAL_PADDING, y: 0, width: Math.max(0, controller.dragRegion.frame.width - TITLE_HORIZONTAL_PADDING), height: TITLE_HEIGHT };
     controller.closeButton.frame = { x: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN), y: CLOSE_BUTTON_MARGIN, width: CLOSE_BUTTON_SIZE, height: CLOSE_BUTTON_SIZE };
+    controller.miniButton.frame = { x: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - MINI_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2), y: CLOSE_BUTTON_MARGIN, width: MINI_BUTTON_SIZE, height: MINI_BUTTON_SIZE };
+    controller.miniButton.setTitleForState(controller._isMini ? "F" : "M", 0);
     controller.titleDivider.frame = { x: 0, y: TITLE_HEIGHT - 1, width: frame.width, height: 1 };
     controller.webView.frame = { x: 0, y: TITLE_HEIGHT, width: frame.width, height: Math.max(0, frame.height - TITLE_HEIGHT) };
     controller.resizeHandle.frame = { x: frame.width - RESIZE_HANDLE_SIZE, y: frame.height - RESIZE_HANDLE_SIZE, width: RESIZE_HANDLE_SIZE, height: RESIZE_HANDLE_SIZE };
-    controller.resizeHandle.hidden = controller._isMaximized;
+    controller.resizeHandle.hidden = controller._isMaximized || controller._isMini;
+    _mini.refreshLayout(controller);
   }
 
   function setupWebPanelUI(controller) {
@@ -68,6 +78,7 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     var initHeight = _fm.DEFAULT_HEIGHT;
 
     controller._isMaximized = false;
+    controller._isMini = false;
 
     controller.containerView = new UIView({ x: 0, y: 0, width: initWidth, height: initHeight });
     controller.containerView.backgroundColor = WINDOW_BACKGROUND;
@@ -82,11 +93,11 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.titleBar.backgroundColor = WINDOW_BACKGROUND;
     controller.titleBar.autoresizingMask = (1 << 1);
 
-    controller.dragRegion = new UIView({ x: 0, y: 0, width: initWidth - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2, height: TITLE_HEIGHT });
+    controller.dragRegion = new UIView({ x: 0, y: 0, width: initWidth - CLOSE_BUTTON_SIZE - MINI_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 3, height: TITLE_HEIGHT });
     controller.dragRegion.backgroundColor = UIColor.clearColor();
     controller.dragRegion.autoresizingMask = (1 << 1);
 
-    controller.titleLabel = new UILabel({ x: TITLE_HORIZONTAL_PADDING, y: 0, width: initWidth - CLOSE_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2 - TITLE_HORIZONTAL_PADDING, height: TITLE_HEIGHT });
+    controller.titleLabel = new UILabel({ x: TITLE_HORIZONTAL_PADDING, y: 0, width: initWidth - CLOSE_BUTTON_SIZE - MINI_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 3 - TITLE_HORIZONTAL_PADDING, height: TITLE_HEIGHT });
     controller.titleLabel.text = "Ostracon";
     controller.titleLabel.textAlignment = 0;
     controller.titleLabel.font = UIFont.boldSystemFontOfSize(12);
@@ -104,6 +115,16 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.closeButton.layer.masksToBounds = true;
     controller.closeButton.addTargetActionForControlEvents(controller, "closeWindow", 1 << 0);
     controller.titleBar.addSubview(controller.closeButton);
+
+    controller.miniButton = new UIButton({ x: initWidth - CLOSE_BUTTON_SIZE - MINI_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2, y: CLOSE_BUTTON_MARGIN, width: MINI_BUTTON_SIZE, height: MINI_BUTTON_SIZE });
+    controller.miniButton.setTitleForState("M", 0);
+    controller.miniButton.setTitleColorForState(SECONDARY_COLOR, 0);
+    controller.miniButton.titleLabel.font = UIFont.boldSystemFontOfSize(12);
+    controller.miniButton.backgroundColor = CLOSE_BACKGROUND;
+    controller.miniButton.layer.cornerRadius = 6;
+    controller.miniButton.layer.masksToBounds = true;
+    controller.miniButton.addTargetActionForControlEvents(controller, "toggleMiniMode", 1 << 0);
+    controller.titleBar.addSubview(controller.miniButton);
 
     controller.titleDivider = new UIView({ x: 0, y: TITLE_HEIGHT - 1, width: initWidth, height: 1 });
     controller.titleDivider.backgroundColor = BORDER_COLOR;
@@ -158,6 +179,60 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.resizeHandle.addGestureRecognizer(resizeDoubleTap);
 
     controller.view.addSubview(controller.resizeHandle);
+
+    _mini.setup(controller);
+    _mini.setMode(controller, false);
+  }
+
+  function frameCenter(frame) {
+    return { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+  }
+
+  function animateFrameTransition(controller, fromFrame, toFrame, completion) {
+    controller._isPanelTransitioning = true;
+    controller.miniExpandButton.enabled = false;
+    controller.miniButton.enabled = false;
+    controller.view.layer.removeAnimationForKey(PANEL_POSITION_ANIMATION_KEY);
+    controller.view.layer.removeAnimationForKey(PANEL_BOUNDS_ANIMATION_KEY);
+    controller.containerView.layer.removeAnimationForKey(PANEL_CORNER_ANIMATION_KEY);
+    controller.miniContainerView.layer.removeAnimationForKey(PANEL_CORNER_ANIMATION_KEY);
+
+    _fm.applyRootFrame(controller, toFrame, true);
+    refreshWebPanelLayout(controller);
+
+    var positionAnimation = CABasicAnimation.animationWithKeyPath("position");
+    positionAnimation.fromValue = frameCenter(fromFrame);
+    positionAnimation.toValue = frameCenter(toFrame);
+    positionAnimation.duration = PANEL_TRANSITION_DURATION;
+    positionAnimation.timingFunction = CAMediaTimingFunction.functionWithName("easeInEaseOut");
+
+    var boundsAnimation = CABasicAnimation.animationWithKeyPath("bounds.size");
+    boundsAnimation.fromValue = { width: fromFrame.width, height: fromFrame.height };
+    boundsAnimation.toValue = { width: toFrame.width, height: toFrame.height };
+    boundsAnimation.duration = PANEL_TRANSITION_DURATION;
+    boundsAnimation.timingFunction = CAMediaTimingFunction.functionWithName("easeInEaseOut");
+
+    var targetSurface = controller._isMini ? controller.miniContainerView : controller.containerView;
+    var cornerAnimation = CABasicAnimation.animationWithKeyPath("cornerRadius");
+    cornerAnimation.fromValue = controller._isMini ? WINDOW_CORNER_RADIUS : 18;
+    cornerAnimation.toValue = targetSurface.layer.cornerRadius;
+    cornerAnimation.duration = PANEL_TRANSITION_DURATION;
+    cornerAnimation.timingFunction = CAMediaTimingFunction.functionWithName("easeInEaseOut");
+
+    controller.view.layer.addAnimationForKey(positionAnimation, PANEL_POSITION_ANIMATION_KEY);
+    controller.view.layer.addAnimationForKey(boundsAnimation, PANEL_BOUNDS_ANIMATION_KEY);
+    targetSurface.layer.addAnimationForKey(cornerAnimation, PANEL_CORNER_ANIMATION_KEY);
+
+    NSTimer.scheduledTimerWithTimeInterval(PANEL_TRANSITION_DURATION, false, function () {
+      controller.view.layer.removeAnimationForKey(PANEL_POSITION_ANIMATION_KEY);
+      controller.view.layer.removeAnimationForKey(PANEL_BOUNDS_ANIMATION_KEY);
+      targetSurface.layer.removeAnimationForKey(PANEL_CORNER_ANIMATION_KEY);
+      controller._isPanelTransitioning = false;
+      controller.miniExpandButton.enabled = true;
+      controller.miniButton.enabled = true;
+      refreshWebPanelLayout(controller);
+      if (completion) completion();
+    });
   }
 
   function togglePanelMaximize(controller) {
@@ -165,16 +240,64 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     var bounds = superview ? superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
 
     if (!controller._isMaximized) {
-      controller._preMaxFrame = controller._preferredFrame || controller.view.frame;
+      var nextRestoreFrame = controller._preferredFrame || controller.view.frame;
+      if (controller._isMini) {
+        controller._lastMiniFrame = controller._preferredFrame || controller.view.frame;
+        _fm.saveWebPanelFrame(controller);
+        nextRestoreFrame = controller._preMiniFrame || _fm.createDefaultFrame(bounds);
+        controller._isMini = false;
+        _fm.savePanelMode(_fm.PANEL_MODE_FULL);
+        _mini.setMode(controller, false);
+        syncPanelModeToWeb(controller);
+      }
+      controller._preMaxFrame = nextRestoreFrame;
       _fm.applyRootFrame(controller, { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, false);
       controller._isMaximized = true;
     } else {
-      _fm.applyRootFrame(controller, _fm.normalizePanelFrame(controller._preMaxFrame, bounds), true);
+      _fm.applyRootFrame(controller, _fm.normalizePanelFrame(controller._preMaxFrame, bounds, _fm.PANEL_MODE_FULL), true);
       controller._isMaximized = false;
     }
 
     refreshWebPanelLayout(controller);
     _fm.saveWebPanelFrame(controller);
+  }
+
+  function syncPanelModeToWeb(controller) {
+    var mode = controller._isMini ? _fm.PANEL_MODE_MINI : _fm.PANEL_MODE_FULL;
+    _bd.evaluateScript(controller.webView, "typeof window.__OstraconSetPanelMode==='function'&&window.__OstraconSetPanelMode('" + mode + "');");
+  }
+
+  function toggleMiniMode(controller) {
+    if (controller._isPanelTransitioning) return;
+    var bounds = controller.view.superview ? controller.view.superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
+    var fromFrame = controller.view.frame;
+    var targetFrame;
+
+    if (!controller._isMini) {
+      if (controller._isMaximized) {
+        controller._isMaximized = false;
+        controller._preMiniFrame = controller._preMaxFrame || _fm.createDefaultFrame(bounds);
+      } else {
+        controller._preMiniFrame = controller._preferredFrame || controller.view.frame;
+        _fm.saveWebPanelFrame(controller);
+      }
+      controller._isMini = true;
+      _fm.savePanelMode(_fm.PANEL_MODE_MINI);
+      targetFrame = _fm.normalizePanelFrame(controller._lastMiniFrame || _fm.createMiniFrame(bounds), bounds, _fm.PANEL_MODE_MINI);
+      _mini.setMode(controller, true);
+    } else {
+      controller._lastMiniFrame = controller._preferredFrame || controller.view.frame;
+      _fm.saveWebPanelFrame(controller);
+      controller._isMini = false;
+      _fm.savePanelMode(_fm.PANEL_MODE_FULL);
+      targetFrame = _fm.normalizePanelFrame(controller._preMiniFrame, bounds, _fm.PANEL_MODE_FULL);
+      _mini.setMode(controller, false);
+    }
+
+    syncPanelModeToWeb(controller);
+    animateFrameTransition(controller, fromFrame, targetFrame, function () {
+      _fm.saveWebPanelFrame(controller);
+    });
   }
 
   function loadInitialWebPage(controller) {
@@ -235,8 +358,10 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
         var dx = location.x - self._resizeStartLocation.x;
         var dy = location.y - self._resizeStartLocation.y;
 
-        var width = Math.max(_fm.MIN_WIDTH, self._resizeStartFrame.width + dx);
-        var height = Math.max(_fm.MIN_HEIGHT, self._resizeStartFrame.height + dy);
+        var minWidth = self._isMini ? _fm.MINI_MIN_WIDTH : _fm.MIN_WIDTH;
+        var minHeight = self._isMini ? _fm.MINI_MIN_HEIGHT : _fm.MIN_HEIGHT;
+        var width = Math.max(minWidth, self._resizeStartFrame.width + dx);
+        var height = Math.max(minHeight, self._resizeStartFrame.height + dy);
 
         var bounds = self.view.superview ? self.view.superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
         var maxX = bounds.x + bounds.width;
@@ -269,6 +394,90 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
       togglePanelMaximize(self);
     },
 
+    toggleMiniMode: function () {
+      toggleMiniMode(self);
+    },
+
+    nativeMiniSendPressed: function () {
+      _mini.dispatchAction(self, "send", {});
+    },
+
+    nativeMiniSendMenuPressed: function () {
+      _mini.showSendMenu(self);
+    },
+
+    nativeMiniQuotePressed: function () {
+      _mini.dispatchAction(self, "quote", {});
+    },
+
+    nativeMiniQuoteMenuPressed: function () {
+      _mini.showQuoteMenu(self);
+    },
+
+    nativeMiniExpandPressed: function () {
+      toggleMiniMode(self);
+    },
+
+    nativeMiniClosePressed: function () {
+      performCloseWindow(self);
+    },
+
+    nativeMiniFileBackPressed: function () {
+      _mini.handleFileBack(self);
+    },
+
+    nativeMiniSetSendSelection: function () {
+      _mini.handleMenuCommand(self, "send-selection");
+    },
+
+    nativeMiniSetSendMindmap: function () {
+      _mini.handleMenuCommand(self, "send-mindmap");
+    },
+
+    nativeMiniSetSendNotebook: function () {
+      _mini.handleMenuCommand(self, "send-notebook");
+    },
+
+    nativeMiniSetFormatCanvas: function () {
+      _mini.handleMenuCommand(self, "format-canvas");
+    },
+
+    nativeMiniOpenMarkdownMenu: function () {
+      _mini.openMarkdownMenu(self);
+    },
+
+    nativeMiniSetMarkdownFlat: function () {
+      _mini.handleMenuCommand(self, "markdown-flat");
+    },
+
+    nativeMiniSetMarkdownTree: function () {
+      _mini.handleMenuCommand(self, "markdown-tree");
+    },
+
+    nativeMiniToggleMarkdownBacklinks: function () {
+      _mini.handleMenuCommand(self, "markdown-backlinks");
+    },
+
+    nativeMiniSetQuoteCursor: function () {
+      _mini.handleMenuCommand(self, "quote-cursor");
+    },
+
+    nativeMiniSetQuoteActiveFile: function () {
+      _mini.handleMenuCommand(self, "quote-active-file");
+    },
+
+    nativeMiniOpenQuoteFilePicker: function () {
+      _mini.openQuoteFilePicker(self);
+    },
+
+    "nativeMiniFileSearchChanged:": function (sender) {
+      _mini.handleFileSearch(self, sender);
+    },
+
+    forceFullModeForDisconnected: function () {
+      if (self._isMini) toggleMiniMode(self);
+    },
+
     viewWillAppear: function () {
       self.view.hidden = false;
       self.webView.delegate = self;
@@ -287,6 +496,7 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
 
     webViewDidFinishLoad: function () {
       UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
+      syncPanelModeToWeb(self);
     },
 
     webViewDidFailLoadWithError: function (webView, error) {
@@ -354,6 +564,9 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller._isMaximized = false;
     _fm.applySavedOrDefaultFrame(controller);
     controller.view.hidden = false;
+    _mini.setMode(controller, controller._isMini);
+    refreshWebPanelLayout(controller);
+    syncPanelModeToWeb(controller);
     _bd.evaluateScript(controller.webView, "typeof window.__onPanelShow==='function'&&window.__onPanelShow();");
     NSUserDefaults.standardUserDefaults().setObjectForKey(true, _fm.PANEL_ON_KEY);
   }

@@ -15,8 +15,7 @@ function useSend({ connection, prefs, format, addSendHistory, setNotice, setLoad
     }
     if (!cardTitlePolicy || typeof cardTitlePolicy !== "object"
       || typeof cardTitlePolicy.useContentAsTitle !== "boolean"
-      || typeof cardTitlePolicy.untitledTitle !== "string"
-      || !cardTitlePolicy.untitledTitle.trim()) {
+      || typeof cardTitlePolicy.untitledTitle !== "string") {
       throw new Error("OB未提供无标题策略，请更新两端插件");
     }
     const scopePayload = {

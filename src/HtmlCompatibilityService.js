@@ -1,5 +1,6 @@
 var __MN_HTML_COMPATIBILITY_SERVICE_MNOstraconAddon = (function () {
   var VOID_TAGS = { area: true, base: true, br: true, col: true, embed: true, hr: true, img: true, input: true, link: true, meta: true, param: true, source: true, track: true, wbr: true };
+  var CSS_PROPERTY_NAME_PATTERN = /^(--[A-Za-z0-9_-]+|-[A-Za-z][A-Za-z0-9-]*-[A-Za-z0-9-]+|[A-Za-z][A-Za-z0-9-]*)$/;
 
   function contextSuffix(context) {
     return ": noteId=" + String(context && context.noteId || "unknown") + ", commentIndex=" + String(context && context.commentIndex !== undefined ? context.commentIndex : -1);
@@ -49,7 +50,7 @@ var __MN_HTML_COMPATIBILITY_SERVICE_MNOstraconAddon = (function () {
       if (colon <= 0) throw new Error("HTML样式声明无效" + contextSuffix(context) + ", declaration=" + declaration);
       var property = declaration.slice(0, colon).trim().toLowerCase();
       var value = declaration.slice(colon + 1).trim();
-      if (!/^(--[A-Za-z0-9_-]+|[A-Za-z][A-Za-z0-9-]*)$/.test(property) || !value) {
+      if (!CSS_PROPERTY_NAME_PATTERN.test(property) || !value) {
         throw new Error("HTML样式属性无效" + contextSuffix(context) + ", declaration=" + declaration);
       }
       var important = /\s*!important\s*$/i.test(value);

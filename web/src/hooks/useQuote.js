@@ -17,10 +17,12 @@ function useQuote(active, setNotice) {
   const selection = useBridgeStore((s) => s.selection.quoteSelection);
   const root = useBridgeStore((s) => s.selection.quoteRoot);
   const context = useBridgeStore((s) => s.selection.quoteContext) || DEFAULT_CONTEXT;
+  const connection = useBridgeStore((s) => s.connection);
 
   const [rootSelectionStatus, setRootSelectionStatus] = useState("idle");
   const [busyTarget, setBusyTarget] = useState("");
   const [error, setError] = useState("");
+  const [continuous, setContinuous] = useState({ active: false, notebookId: "", primaryNoteId: null, items: [] });
   const rootCheckInFlight = useRef(false);
   const rootSelectionSession = useRef(0);
 
@@ -45,6 +47,15 @@ function useQuote(active, setNotice) {
       window.removeEventListener(EVT_SELECTION_CHANGED, refreshQuoteSelection);
     };
   }, [active, setSelection]);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    MNBridge.send(MN_CMD.GET_CONTINUOUS_QUOTE_SESSION_STATE, null, 10000)
+      .then((state) => { if (!cancelled && state) setContinuous(state); })
+      .catch((nextError) => { if (!cancelled) setError(normalizeError(nextError)); });
+    return () => { cancelled = true; };
+  }, [active]);
 
   // rootSelectionStatus 与 store 的 root 同步（waiting 状态下不干扰，避免中断用户选择流程）
   useEffect(() => {
@@ -154,16 +165,113 @@ function useQuote(active, setNotice) {
     }
   }, [setNotice, setSelection]);
 
+  const startContinuous = useCallback(async () => {
+    setBusyTarget("continuous-start");
+    setError("");
+    try {
+      const state = await MNBridge.send(MN_CMD.START_CONTINUOUS_QUOTE_SESSION, null, 10000);
+      setContinuous(state);
+      setNotice("已开始连续摘录");
+      return state;
+    } catch (nextError) {
+      const message = normalizeError(nextError);
+      setError(message);
+      setNotice(message);
+      return null;
+    } finally {
+      setBusyTarget("");
+    }
+  }, [setNotice]);
+
+  const addContinuousSelection = useCallback(async () => {
+    setBusyTarget("continuous-add");
+    setError("");
+    try {
+      const result = await MNBridge.send(MN_CMD.ADD_CONTINUOUS_QUOTE_SELECTION, null, 30000);
+      if (result?.state) setContinuous(result.state);
+      setNotice("已加入连续摘录");
+      return result;
+    } catch (nextError) {
+      const message = normalizeError(nextError);
+      setError(message);
+      setNotice(message);
+      return null;
+    } finally {
+      setBusyTarget("");
+    }
+  }, [setNotice]);
+
+  const cancelContinuous = useCallback(async () => {
+    setBusyTarget("continuous-cancel");
+    setError("");
+    try {
+      const result = await MNBridge.send(MN_CMD.CANCEL_CONTINUOUS_QUOTE_SESSION, null, 30000);
+      setContinuous(result?.state || { active: false, notebookId: "", primaryNoteId: null, items: [] });
+      setNotice("已取消连续摘录");
+      return result;
+    } catch (nextError) {
+      const message = normalizeError(nextError);
+      setError(message);
+      setNotice(message);
+      return null;
+    } finally {
+      setBusyTarget("");
+    }
+  }, [setNotice]);
+
+  const finishContinuous = useCallback(async (target, filePath) => {
+    const cardTitlePolicy = connection.lastHello?.payload?.cardTitlePolicy;
+    if (!cardTitlePolicy || typeof cardTitlePolicy !== "object"
+      || typeof cardTitlePolicy.useContentAsTitle !== "boolean"
+      || typeof cardTitlePolicy.untitledTitle !== "string") {
+      const message = "OB未提供无标题策略，请更新两端插件";
+      setError(message);
+      setNotice(message);
+      return null;
+    }
+    setBusyTarget(`continuous-${target}`);
+    setError("");
+    try {
+      const rendered = await MNBridge.send(MN_CMD.FINISH_CONTINUOUS_QUOTE_SESSION, {
+        cardTitlePolicy,
+      }, 45000);
+      if (!rendered?.quote?.content) throw new Error("连续摘录内容为空");
+      const result = await ostraconWsClient.sendObsidianCommand(OB_CMD.INSERT_QUOTE, {
+        target,
+        filePath,
+        quote: rendered.quote,
+      }, 45000);
+      setContinuous({ active: false, notebookId: "", primaryNoteId: null, items: [] });
+      if (result?.ok) setNotice("已插入连续摘录");
+      return result;
+    } catch (nextError) {
+      const message = normalizeError(nextError);
+      setError(message);
+      setNotice(message);
+      return null;
+    } finally {
+      setBusyTarget("");
+      ostraconWsClient.sendObsidianCommand(OB_CMD.GET_QUOTE_CONTEXT)
+        .then((ctx) => setSelection({ quoteContext: ctx }))
+        .catch(() => { /* ignore */ });
+    }
+  }, [connection.lastHello, setNotice, setSelection]);
+
   return {
     selection,
     root,
     rootSelectionStatus,
     context,
+    continuous,
     busyTarget,
     error,
     toggleRootSelection,
     clearRoot,
     insert,
+    startContinuous,
+    addContinuousSelection,
+    cancelContinuous,
+    finishContinuous,
   };
 }
 

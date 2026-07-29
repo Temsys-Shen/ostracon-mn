@@ -25,6 +25,15 @@ import useBridgeStore from "../store/useBridgeStore";
 
 function resetStoreSelection() {
   useBridgeStore.setState({
+    connection: {
+      ...useBridgeStore.getState().connection,
+      lastHello: {
+        payload: {
+          cardTemplate: "{{content}}",
+          cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+        },
+      },
+    },
     selection: {
       cardsInfo: null,
       insertContext: null,
@@ -38,7 +47,33 @@ function resetStoreSelection() {
 }
 
 function configureMocks(selection = null, root = null, context = null) {
+  let continuousState = { active: false, notebookId: "", primaryNoteId: null, items: [] };
   mocks.bridgeSend.mockImplementation(command => {
+    if (command === "getQuoteSelectionPreview") return Promise.resolve(selection);
+    if (command === "getQuoteRootState") return Promise.resolve(root);
+    if (command === "getContinuousQuoteSessionState") return Promise.resolve(continuousState);
+    if (command === "startContinuousQuoteSession") {
+      continuousState = { active: true, notebookId: "nb1", primaryNoteId: null, items: [] };
+      return Promise.resolve(continuousState);
+    }
+    if (command === "addContinuousQuoteSelection") {
+      continuousState = { active: true, notebookId: "nb1", primaryNoteId: "note1", items: [{ noteId: "note1", title: "第一段", kind: "text" }] };
+      return Promise.resolve({ state: continuousState, item: continuousState.items[0] });
+    }
+    if (command === "cancelContinuousQuoteSession") {
+      continuousState = { active: false, notebookId: "", primaryNoteId: null, items: [] };
+      return Promise.resolve({ cancelled: true, state: continuousState });
+    }
+    if (command === "finishContinuousQuoteSession") {
+      continuousState = { active: false, notebookId: "", primaryNoteId: null, items: [] };
+      return Promise.resolve({
+        noteId: "note1",
+        quote: { content: "正文", link: "marginnote4app://note/note1", title: "第一段", heading: "##" },
+        fileBaseName: "第一段",
+        noteCount: 1,
+        cards: [],
+      });
+    }
     if (command === "selectQuoteRootFromCurrentSelection") return Promise.resolve({ selected: false, selectedCount: 0 });
     if (command === "clearQuoteRoot") return Promise.resolve({ cleared: true });
     throw new Error(`Unexpected bridge command: ${command}`);
@@ -135,6 +170,67 @@ describe("useQuote", () => {
       45000,
     );
     expect(setNotice).toHaveBeenCalledWith("已插入引文");
+    unmount();
+  });
+
+  test("collects and inserts a continuous quote through the quote template path", async () => {
+    const setNotice = vi.fn();
+    const { result, unmount } = renderHook(() => useQuote(true, setNotice));
+    await waitFor(() => expect(result.current.context.cursor.available).toBe(true));
+
+    await act(async () => { await result.current.startContinuous(); });
+    expect(result.current.continuous.active).toBe(true);
+
+    await act(async () => { await result.current.addContinuousSelection(); });
+    expect(result.current.continuous.items).toHaveLength(1);
+
+    await act(async () => { await result.current.finishContinuous("active-file"); });
+    expect(mocks.bridgeSend).toHaveBeenCalledWith(
+      "finishContinuousQuoteSession",
+      {
+        cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+      },
+      45000,
+    );
+    expect(mocks.sendObsidianCommand).toHaveBeenCalledWith(
+      "insertQuote",
+      {
+        target: "active-file",
+        filePath: undefined,
+        quote: { content: "正文", link: "marginnote4app://note/note1", title: "第一段", heading: "##" },
+      },
+      45000,
+    );
+    expect(setNotice).toHaveBeenCalledWith("已插入连续摘录");
+    unmount();
+  });
+
+  test("accepts an empty untitled title policy for continuous quote rendering", async () => {
+    useBridgeStore.setState({
+      connection: {
+        ...useBridgeStore.getState().connection,
+        lastHello: {
+          payload: {
+            cardTemplate: "{{content}}",
+            cardTitlePolicy: { useContentAsTitle: false, untitledTitle: "" },
+          },
+        },
+      },
+    });
+    const setNotice = vi.fn();
+    const { result, unmount } = renderHook(() => useQuote(true, setNotice));
+    await waitFor(() => expect(result.current.context.cursor.available).toBe(true));
+
+    await act(async () => { await result.current.finishContinuous("active-file"); });
+
+    expect(mocks.bridgeSend).toHaveBeenCalledWith(
+      "finishContinuousQuoteSession",
+      {
+        cardTitlePolicy: { useContentAsTitle: false, untitledTitle: "" },
+      },
+      45000,
+    );
+    expect(setNotice).toHaveBeenCalledWith("已插入连续摘录");
     unmount();
   });
 });

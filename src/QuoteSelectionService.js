@@ -58,16 +58,16 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     const state = context.addon._ostraconQuoteRoot || null;
     let root = null;
     if (state) {
-      if (state.notebookId !== notebookId) throw new Error("卡片根节点不属于当前学习集");
+      if (state.notebookId !== notebookId) throw new Error("同级节点不属于当前学习集");
       root = Database.sharedInstance().getNoteById(state.noteId);
-      if (!root) throw new Error("设置的卡片根节点已不存在: " + state.noteId);
+      if (!root) throw new Error("设置的同级节点已不存在: " + state.noteId);
     }
 
     const note = documentController(context).highlightFromSelection();
     if (!note || !note.noteId) throw new Error("MN未能从当前选区创建卡片");
 
     if (root) {
-      UndoManager.sharedInstance().undoGrouping("设置引文卡片根节点", notebookId, function () {
+      UndoManager.sharedInstance().undoGrouping("设置引文同级节点", notebookId, function () {
         root.addChild(note);
       });
       Application.sharedInstance().refreshAfterDBChanged(notebookId);
@@ -76,6 +76,20 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     selection.noteId = String(note.noteId);
     selection.link = "marginnote4app://note/" + selection.noteId;
     return selection;
+  }
+
+  function createCardFromCurrentSelection(context) {
+    const selection = captureSelection(context);
+    if (!selection) throw new Error("请先选择要加入连续摘录的内容");
+    const note = documentController(context).highlightFromSelection();
+    if (!note || !note.noteId) throw new Error("MN未能从当前选区创建卡片");
+    selection.noteId = String(note.noteId);
+    selection.link = "marginnote4app://note/" + selection.noteId;
+    return {
+      notebookId: currentNotebookId(context),
+      note: note,
+      selection: selection,
+    };
   }
 
   function getQuoteSelection(context, payload) {
@@ -140,7 +154,10 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
   }
 
   function handleNotebookClose(context) {
-    context._ostraconQuoteRoot = null;
+    const addon = context && context.addon ? context.addon : context;
+    if (!addon || !addon.window) throw new Error("关闭学习集时缺少插件上下文");
+    addon._ostraconQuoteRoot = null;
+    __MN_CONTINUOUS_QUOTE_SERVICE_MNOstraconAddon.clearSession(addon);
     pushWebEvent(context, EVT_QUOTE_ROOT_CLEARED);
   }
 
@@ -152,6 +169,8 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     getQuoteSelection,
     getQuoteSelectionPreview,
     getQuoteRootState,
+    currentNotebookId,
+    createCardFromCurrentSelection,
     selectQuoteRootFromCurrentSelection,
     clearQuoteRoot,
   };

@@ -5,7 +5,7 @@
 // 由 src/QuoteSelectionService.js handleSelectionChanged 派发
 export const EVT_SELECTION_CHANGED = "ostracon:selection-changed";
 
-// MN 端学习集关闭时清空引文根节点 → WebView 的 CustomEvent
+// MN 端学习集关闭时清空引文同级节点 → WebView 的 CustomEvent
 // 由 src/QuoteSelectionService.js handleNotebookClose 派发
 export const EVT_QUOTE_ROOT_CLEARED = "ostracon:quote-root-cleared";
 

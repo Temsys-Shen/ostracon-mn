@@ -71,6 +71,16 @@ describe("HtmlCompatibilityService", () => {
     expect(result).toContain('<table><tr><td><a href="https://example.com">Link</a></td></tr></table>');
   });
 
+  test("accepts vendor-prefixed CSS properties in style sheets and inline styles", () => {
+    const html = `<style>
+      body { -webkit-text-size-adjust: none; color: red }
+    </style><body><p style="-moz-osx-font-smoothing: grayscale">文本</p></body>`;
+    const result = loadService().convertHtml(html, { noteId: "vendor", commentIndex: 1 });
+
+    expect(result).toContain('style="-webkit-text-size-adjust:none;color:red"');
+    expect(result).toContain('style="-moz-osx-font-smoothing:grayscale"');
+  });
+
   test("keeps ordinary HTML fragments unchanged", () => {
     const fragment = '<p><strong>富文本</strong><br><span style="color:red">红色</span></p>';
     expect(loadService().convertHtml(fragment, { noteId: "fragment", commentIndex: 0 })).toBe(fragment);

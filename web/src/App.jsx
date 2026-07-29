@@ -1,15 +1,18 @@
-import { useMemo, useCallback, useState, useEffect } from "react";
+import React, { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import ostraconWsClient from "./lib/ostraconWsClient";
+import MNBridge from "./lib/mnBridge";
 import useBridgeStore from "./store/useBridgeStore";
 import { useConnection, useDiscovery, parseConnectionUrl } from "./hooks/useConnection";
 import { formatWsUrl } from "./hooks/useConnection";
 import { usePreferences } from "./hooks/usePreferences";
 import { useSelectionWatcher } from "./hooks/useSelectionWatcher";
 import { useSend } from "./hooks/useSend";
+import { useQuote } from "./hooks/useQuote";
 import { normalizeError } from "./lib/errors";
 import { isSendDisabled } from "./lib/sendRules";
+import { MN_CMD, OB_CMD } from "./lib/commands";
 import VaultBrowser from "./components/VaultBrowser";
-import QuotePanel from "./components/QuotePanel";
+import { QuotePanelView } from "./components/QuotePanel";
 import { Library, Quote, Send } from "lucide-react";
 
 function formatTime(iso) {
@@ -175,7 +178,11 @@ export default function App() {
   const [urlInput, setUrlInput] = useState("");
   const [sendScope, setSendScope] = useState("selection");
   const [workspace, setWorkspace] = useState("send");
+  const [panelMode, setPanelMode] = useState("full");
+  const [miniQuoteTarget, setMiniQuoteTarget] = useState("cursor");
+  const [miniQuoteFilePath, setMiniQuoteFilePath] = useState("");
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  const nativeFileRequestRef = useRef(0);
 
   const connection = useBridgeStore((s) => s.connection);
   const sendHistory = useBridgeStore((s) => s.sendHistory);
@@ -193,6 +200,7 @@ export default function App() {
   const { send } = useSend({
     connection, prefs, format, addSendHistory, setNotice, setLoading,
   });
+  const quote = useQuote(connection.connected, setNotice);
 
   const isConnecting = connection.status === "connecting";
   const requestDisconnect = useCallback(() => {
@@ -244,6 +252,148 @@ export default function App() {
   );
 
   useEffect(() => {
+    window.__OstraconSetPanelMode = (mode) => {
+      if (mode !== "mini" && mode !== "full") throw new Error(`不支持的面板模式: ${mode}`);
+      setPanelMode(mode);
+    };
+    return () => {
+      delete window.__OstraconSetPanelMode;
+    };
+  }, []);
+
+  const syncNativeMiniFiles = useCallback((payload) => {
+    return MNBridge.send(MN_CMD.SYNC_NATIVE_MINI_FILES, payload, 10000);
+  }, []);
+
+  useEffect(() => {
+    window.__OstraconNativeMiniAction = async (raw) => {
+      const message = JSON.parse(raw);
+      const action = message?.action;
+      const payload = message?.payload || {};
+
+      if (action === "set-send-scope") {
+        if (!["selection", "mindmap", "notebook"].includes(payload.scope)) throw new Error(`不支持的发送范围: ${payload.scope}`);
+        setSendScope(payload.scope);
+        return;
+      }
+      if (action === "set-format") {
+        if (!["markdown", "canvas"].includes(payload.format)) throw new Error(`不支持的发送格式: ${payload.format}`);
+        setFormat(payload.format);
+        return;
+      }
+      if (action === "set-markdown-mode") {
+        if (!["flat", "tree"].includes(payload.mode)) throw new Error(`不支持的Markdown模式: ${payload.mode}`);
+        setFormat("markdown");
+        setPrefs("mode", payload.mode);
+        return;
+      }
+      if (action === "toggle-backlinks") {
+        setFormat("markdown");
+        setPrefs("includeBacklinks", !prefs.includeBacklinks);
+        return;
+      }
+      if (action === "send") {
+        if (isSendDisabled(loading, sendScope, selectedCount)) throw new Error("当前发送条件不可用");
+        await send({ scope: sendScope });
+        return;
+      }
+      if (action === "set-quote-target") {
+        if (!["cursor", "active-file"].includes(payload.target)) throw new Error(`不支持的引文目标: ${payload.target}`);
+        setMiniQuoteTarget(payload.target);
+        return;
+      }
+      if (action === "quote") {
+        if (!quote.selection || quote.busyTarget) throw new Error("当前引文条件不可用");
+        if (miniQuoteTarget === "file") {
+          if (!miniQuoteFilePath) throw new Error("尚未选择引文文件");
+          await quote.insert("file", miniQuoteFilePath);
+          return;
+        }
+        await quote.insert(miniQuoteTarget);
+        return;
+      }
+      if (action === "select-file") {
+        if (typeof payload.path !== "string" || !payload.path) throw new Error("引文文件路径为空");
+        setMiniQuoteFilePath(payload.path);
+        setMiniQuoteTarget("file");
+        return;
+      }
+      if (action === "list-files") {
+        const requestId = nativeFileRequestRef.current + 1;
+        nativeFileRequestRef.current = requestId;
+        await syncNativeMiniFiles({ folderPath: payload.path || "", query: "", folders: [], documents: [], loading: true, error: "" });
+        try {
+          const folder = await ostraconWsClient.sendObsidianCommand(OB_CMD.LIST_VAULT_FOLDER, { path: payload.path || "" });
+          if (requestId !== nativeFileRequestRef.current) return;
+          await syncNativeMiniFiles({
+            folderPath: payload.path || "",
+            query: "",
+            folders: folder.folders || [],
+            documents: folder.documents || [],
+            loading: false,
+            error: "",
+          });
+        } catch (error) {
+          if (requestId !== nativeFileRequestRef.current) return;
+          await syncNativeMiniFiles({ folderPath: payload.path || "", query: "", folders: [], documents: [], loading: false, error: normalizeError(error) });
+        }
+        return;
+      }
+      if (action === "search-files") {
+        const query = String(payload.query || "").trim();
+        if (!query) {
+          await window.__OstraconNativeMiniAction(JSON.stringify({ action: "list-files", payload: { path: "" } }));
+          return;
+        }
+        const requestId = nativeFileRequestRef.current + 1;
+        nativeFileRequestRef.current = requestId;
+        await syncNativeMiniFiles({ folderPath: "", query, folders: [], documents: [], loading: true, error: "" });
+        try {
+          const result = await ostraconWsClient.sendObsidianCommand(OB_CMD.SEARCH_VAULT_DOCUMENTS, { query, limit: 100 }, 120000);
+          if (requestId !== nativeFileRequestRef.current) return;
+          await syncNativeMiniFiles({ folderPath: "", query, folders: [], documents: result.items || [], loading: false, error: "" });
+        } catch (error) {
+          if (requestId !== nativeFileRequestRef.current) return;
+          await syncNativeMiniFiles({ folderPath: "", query, folders: [], documents: [], loading: false, error: normalizeError(error) });
+        }
+        return;
+      }
+      throw new Error(`不支持的原生mini操作: ${action}`);
+    };
+    return () => {
+      delete window.__OstraconNativeMiniAction;
+    };
+  }, [loading, miniQuoteFilePath, miniQuoteTarget, prefs.includeBacklinks, quote, selectedCount, send, sendScope, setPrefs, syncNativeMiniFiles]);
+
+  useEffect(() => {
+    const quoteTargetUnavailable = (miniQuoteTarget === "cursor" && !quote.context.cursor.available)
+      || (miniQuoteTarget === "active-file" && !quote.context.activeFile.available)
+      || (miniQuoteTarget === "file" && !miniQuoteFilePath);
+    const state = {
+      connected: connection.connected,
+      status: connection.status,
+      loading,
+      selectedCount,
+      sendScope,
+      format,
+      prefs,
+      sendDisabled: isSendDisabled(loading, sendScope, selectedCount),
+      quoteTarget: miniQuoteTarget,
+      quoteFilePath: miniQuoteFilePath,
+      quoteDisabled: !quote.selection || Boolean(quote.busyTarget) || quoteTargetUnavailable,
+      quote: {
+        selectionAvailable: Boolean(quote.selection),
+        cursorAvailable: quote.context.cursor.available,
+        activeFileAvailable: quote.context.activeFile.available,
+        rootTitle: quote.root?.title || "",
+        busyTarget: quote.busyTarget,
+      },
+    };
+    MNBridge.send(MN_CMD.SYNC_NATIVE_MINI_STATE, state, 10000)
+      .catch((error) => console.log("syncNativeMiniState failed", normalizeError(error)));
+  }, [connection.connected, connection.status, format, loading, miniQuoteFilePath, miniQuoteTarget, prefs, quote.busyTarget, quote.context, quote.root, quote.selection, selectedCount, sendScope]);
+
+  useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 2500);
     return () => window.clearTimeout(timer);
@@ -255,40 +405,44 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {toast}
+      {panelMode === "full" && toast}
 
-      {(!connection.connected || connection.status === "pending_approval") && (
-        <ConnectionPanel
-          urlInput={urlInput}
-          onUrlInputChange={handleUrlInputChange}
-          isConnecting={isConnecting}
-          onConnect={() => doConnect(urlInput)}
-          connection={connection}
-          discoveredServers={discoveredServers}
-          scanning={scanning}
-          onScan={handleScan}
-          onConnectToServer={handleConnectToServer}
-        />
+      {panelMode === "full" && (
+        <>
+          {(!connection.connected || connection.status === "pending_approval") && (
+            <ConnectionPanel
+              urlInput={urlInput}
+              onUrlInputChange={handleUrlInputChange}
+              isConnecting={isConnecting}
+              onConnect={() => doConnect(urlInput)}
+              connection={connection}
+              discoveredServers={discoveredServers}
+              scanning={scanning}
+              onScan={handleScan}
+              onConnectToServer={handleConnectToServer}
+            />
+          )}
+
+          {connection.connected && connection.status !== "pending_approval" && (
+            workspace === "send" ? <>
+              <SendArea
+                loading={loading}
+                selectedCount={selectedCount}
+                send={send}
+                sendScope={sendScope}
+                setSendScope={setSendScope}
+              />
+
+              <OptionsPanel format={format} setFormat={setFormat} prefs={prefs} setPrefs={setPrefs} />
+
+              <HistorySection history={sendHistory} vaultName={connection.vaultName} />
+            </> : workspace === "browse"
+              ? <VaultBrowser connection={connection} setNotice={setNotice} />
+              : <QuotePanelView quote={quote} />
+          )}
+          <BottomDock connection={connection} onStatusClick={requestDisconnect} workspace={workspace} setWorkspace={setWorkspace} />
+        </>
       )}
-
-      {connection.connected && connection.status !== "pending_approval" && (
-        workspace === "send" ? <>
-          <SendArea
-            loading={loading}
-            selectedCount={selectedCount}
-            send={send}
-            sendScope={sendScope}
-            setSendScope={setSendScope}
-          />
-
-          <OptionsPanel format={format} setFormat={setFormat} prefs={prefs} setPrefs={setPrefs} />
-
-          <HistorySection history={sendHistory} vaultName={connection.vaultName} />
-        </> : workspace === "browse"
-          ? <VaultBrowser connection={connection} setNotice={setNotice} />
-          : <QuotePanel active={workspace === "quote"} setNotice={setNotice} />
-      )}
-      <BottomDock connection={connection} onStatusClick={requestDisconnect} workspace={workspace} setWorkspace={setWorkspace} />
       <DisconnectDialog open={disconnectDialogOpen} onCancel={cancelDisconnect} onConfirm={confirmDisconnect} />
     </div>
   );

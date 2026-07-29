@@ -649,6 +649,38 @@ button:focus-visible, input:focus-visible {
 .quote-actions button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quote-actions button svg { flex: 0 0 auto; }
 
+.quote-continuous {
+  display: flex;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 6px 10px;
+  border-top: 1px solid var(--line);
+}
+.quote-continuous > div { min-width: 0; flex: 1; }
+.quote-continuous small, .quote-continuous strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-continuous small { color: var(--subtle); font-size: 10px; }
+.quote-continuous strong { margin-top: 3px; font-size: 12px; }
+.quote-continuous button {
+  display: flex;
+  min-width: 0;
+  height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 650;
+}
+.quote-continuous button:first-of-type { border-color: var(--accent); background: var(--accent); color: #fff; }
+.quote-continuous button:disabled { cursor: default; opacity: .4; }
+.quote-continuous button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-continuous button svg, .quote-continuous-check { flex: 0 0 auto; }
+.quote-continuous-check { color: var(--accent-strong); }
+
 .quote-root-setting {
   display: flex;
   min-height: 48px;
@@ -715,6 +747,8 @@ button:focus-visible, input:focus-visible {
   .connection-chip { max-width: 34%; }
   .quote-actions { gap: 4px; }
   .quote-actions button { height: 36px; gap: 3px; padding: 0 4px; font-size: 11px; }
+  .quote-continuous { gap: 4px; padding-inline: 6px; }
+  .quote-continuous button { gap: 3px; padding: 0 6px; font-size: 11px; }
 }
 .history-ob-link:hover {
   background: #dfeaff;

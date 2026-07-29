@@ -129,7 +129,6 @@ var __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon = (function () {
         throw new Error("请先单选一张卡片");
       }
       var targetNote = null;
-      var sourceMarker = "\n\n<!-- ostracon_ob_path:" + String(document.sourcePath || "") + " mtime:" + String(document.mtime || "") + " -->";
       var undoTitle = operation === "append" ? "追加Obsidian文档" : "创建Obsidian卡片";
       UndoManager.sharedInstance().undoGrouping(undoTitle, target.notebookId, function () {
         if (operation === "create") {
@@ -140,9 +139,9 @@ var __MN_OBSIDIAN_CARD_IMPORT_SERVICE_MNOstraconAddon = (function () {
           targetNote = target.parent;
         }
         if (contentMode === "html") {
-          targetNote.appendHtmlComment(html + sourceMarker, plainText, { width: Number(htmlSize.width), height: Number(htmlSize.height) }, "ostracon-ob");
+          targetNote.appendHtmlComment(html, plainText, { width: Number(htmlSize.width), height: Number(htmlSize.height) }, "ostracon-ob");
         } else {
-          targetNote.appendMarkdownComment(markdown + sourceMarker);
+          targetNote.appendMarkdownComment(markdown);
           targetNote.processMarkdownBase64Images();
         }
       });

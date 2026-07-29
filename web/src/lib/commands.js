@@ -9,6 +9,8 @@ export const MN_CMD = {
   SET_CLIENT_ID: "setClientId",
   GET_MARKDOWN_PREFERENCES: "getMarkdownPreferences",
   SET_MARKDOWN_PREFERENCES: "setMarkdownPreferences",
+  SYNC_NATIVE_MINI_STATE: "syncNativeMiniState",
+  SYNC_NATIVE_MINI_FILES: "syncNativeMiniFiles",
 
   // 卡片选择 / 范围
   GET_SELECTED_CARDS_INFO: "getSelectedCardsInfo",
@@ -28,6 +30,11 @@ export const MN_CMD = {
   GET_QUOTE_ROOT_STATE: "getQuoteRootState",
   SELECT_QUOTE_ROOT: "selectQuoteRootFromCurrentSelection",
   CLEAR_QUOTE_ROOT: "clearQuoteRoot",
+  START_CONTINUOUS_QUOTE_SESSION: "startContinuousQuoteSession",
+  ADD_CONTINUOUS_QUOTE_SELECTION: "addContinuousQuoteSelection",
+  CANCEL_CONTINUOUS_QUOTE_SESSION: "cancelContinuousQuoteSession",
+  FINISH_CONTINUOUS_QUOTE_SESSION: "finishContinuousQuoteSession",
+  GET_CONTINUOUS_QUOTE_SESSION_STATE: "getContinuousQuoteSessionState",
 
   // Obsidian 文档导入（markdown/html）
   GET_OBSIDIAN_INSERT_CONTEXT: "getObsidianInsertContext",

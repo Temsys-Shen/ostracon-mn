@@ -31,7 +31,7 @@ var __MN_OSTRACON_UTILS_MNOstraconAddon = (function () {
     if (typeof value.useContentAsTitle !== "boolean") {
       throw new Error("OB无标题策略缺少useContentAsTitle，请更新两端插件");
     }
-    if (typeof value.untitledTitle !== "string" || !value.untitledTitle.trim()) {
+    if (typeof value.untitledTitle !== "string") {
       throw new Error("OB无标题策略缺少untitledTitle，请更新两端插件");
     }
     return {

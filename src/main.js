@@ -9,15 +9,17 @@ JSB.require("CardContentService");
 JSB.require("MarkdownExportService");
 JSB.require("CanvasExportService");
 JSB.require("QuoteSelectionService");
+JSB.require("ContinuousQuoteService");
 JSB.require("BridgeCommandsPersistence");
 JSB.require("BridgeCommandsInfo");
 JSB.require("BridgeCommandsContent");
 JSB.require("ObsidianCardImportService");
 JSB.require("ObsidianPdfImportService");
 JSB.require("MarginNoteUrlService");
-JSB.require("WebBridgeCommands");
 JSB.require("FrameManager");
 JSB.require("BridgeDispatcher");
+JSB.require("NativeMiniSurface");
+JSB.require("WebBridgeCommands");
 JSB.require("WebPanelController");
 JSB.require("MNOstraconAddon");
 
