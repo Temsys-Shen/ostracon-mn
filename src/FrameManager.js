@@ -4,7 +4,7 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
   const PANEL_MODE_KEY = "mn_web_template_mnostraconaddon_panel_mode";
   const PANEL_ON_KEY = "mn_web_template_mnostraconaddon_panel_on";
 
-  const MIN_WIDTH = 260;
+  const MIN_WIDTH = 292;
   const MIN_HEIGHT = 300;
   const MINI_MIN_WIDTH = 240;
   const MINI_MIN_HEIGHT = 40;
