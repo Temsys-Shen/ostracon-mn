@@ -5,13 +5,13 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
   const PANEL_ON_KEY = "mn_web_template_mnostraconaddon_panel_on";
 
   const MIN_WIDTH = 260;
-  const MIN_HEIGHT = 660;
+  const MIN_HEIGHT = 300;
   const MINI_MIN_WIDTH = 240;
-  const MINI_MIN_HEIGHT = 32;
-  const MINI_DEFAULT_WIDTH = 240;
-  const MINI_DEFAULT_HEIGHT = 32;
-  const DEFAULT_WIDTH = 480;
-  const DEFAULT_HEIGHT = 660;
+  const MINI_MIN_HEIGHT = 40;
+  const MINI_DEFAULT_WIDTH = 320;
+  const MINI_DEFAULT_HEIGHT = 40;
+  const DEFAULT_WIDTH = 520;
+  const DEFAULT_HEIGHT = 480;
   const PANEL_MARGIN = 16;
   const PANEL_MODE_FULL = "full";
   const PANEL_MODE_MINI = "mini";
@@ -74,9 +74,11 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
     var isMini = mode === PANEL_MODE_MINI;
     var fallback = isMini ? createMiniFrame(safeBounds) : createDefaultFrame(safeBounds);
     var source = frame || fallback;
+    // ★ Fix: 移除宽度上限（不再用 DEFAULT_WIDTH / MINI_DEFAULT_WIDTH 限制最大宽度）
+    // 宽度只受屏幕宽度约束：最小 = minWidth，最大 = screenWidth - margin
     var maxWidth = isMini
-      ? Math.min(MINI_DEFAULT_WIDTH, Math.max(MINI_MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2))
-      : Math.min(DEFAULT_WIDTH, Math.max(MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2));
+      ? Math.max(MINI_MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2)
+      : Math.max(MIN_WIDTH, safeBounds.width - PANEL_MARGIN * 2);
     var maxHeight = isMini
       ? Math.min(MINI_DEFAULT_HEIGHT, Math.max(MINI_MIN_HEIGHT, safeBounds.height - PANEL_MARGIN * 2))
       : Math.max(260, safeBounds.height - PANEL_MARGIN * 2);
@@ -179,6 +181,8 @@ var __MN_FRAME_MANAGER_MNOstraconAddon = (function () {
 
   function keepPanelWithinStudyBounds(controller) {
     if (!controller.view || !controller.view.superview) return;
+    // ★ Fix: 步进动画期间不修正 frame，避免与 NSTimer 插值冲突
+    if (controller._isPanelTransitioning) return;
     var bounds = getStudyRootBounds(controller);
 
     if (controller._isMaximized) {

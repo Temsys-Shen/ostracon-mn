@@ -16,6 +16,8 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
   const PANEL_BOUNDS_ANIMATION_KEY = "ostracon-panel-bounds";
   const PANEL_CORNER_ANIMATION_KEY = "ostracon-panel-corner";
 
+  var _transitionGen = 0;
+
   const WINDOW_BACKGROUND = UIColor.colorWithRedGreenBlueAlpha(247 / 255, 248 / 255, 250 / 255, 1);
   const TITLE_COLOR = UIColor.colorWithRedGreenBlueAlpha(37 / 255, 42 / 255, 52 / 255, 1);
   const SECONDARY_COLOR = UIColor.colorWithRedGreenBlueAlpha(105 / 255, 115 / 255, 134 / 255, 1);
@@ -62,7 +64,10 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.miniButton.frame = { x: Math.max(0, frame.width - CLOSE_BUTTON_SIZE - MINI_BUTTON_SIZE - CLOSE_BUTTON_MARGIN * 2), y: CLOSE_BUTTON_MARGIN, width: MINI_BUTTON_SIZE, height: MINI_BUTTON_SIZE };
     controller.miniButton.setTitleForState(controller._isMini ? "F" : "M", 0);
     controller.titleDivider.frame = { x: 0, y: TITLE_HEIGHT - 1, width: frame.width, height: 1 };
-    controller.webView.frame = { x: 0, y: TITLE_HEIGHT, width: frame.width, height: Math.max(0, frame.height - TITLE_HEIGHT) };
+    // ★ Fix: mini 模式下 webView 不可见，保持原有 frame 避免 autoresize 到零高度
+    if (!controller._isMini) {
+      controller.webView.frame = { x: 0, y: TITLE_HEIGHT, width: frame.width, height: Math.max(0, frame.height - TITLE_HEIGHT) };
+    }
     controller.resizeHandle.frame = { x: frame.width - RESIZE_HANDLE_SIZE, y: frame.height - RESIZE_HANDLE_SIZE, width: RESIZE_HANDLE_SIZE, height: RESIZE_HANDLE_SIZE };
     controller.resizeHandle.hidden = controller._isMaximized || controller._isMini;
     _mini.refreshLayout(controller);
@@ -143,7 +148,7 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.webView = new UIWebView({ x: 0, y: TITLE_HEIGHT, width: initWidth, height: Math.max(0, initHeight - TITLE_HEIGHT) });
     controller.webView.backgroundColor = WINDOW_BACKGROUND;
     controller.webView.scalesPageToFit = true;
-    controller.webView.autoresizingMask = (1 << 1 | 1 << 4);
+    controller.webView.autoresizingMask = 0;
     controller.webView.delegate = controller;
     controller.webView.scrollView.bounces = false;
     controller.webView.scrollView.alwaysBounceVertical = false;
@@ -189,6 +194,7 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
   }
 
   function animateFrameTransition(controller, fromFrame, toFrame, completion) {
+    var gen = ++_transitionGen;
     controller._isPanelTransitioning = true;
     controller.miniExpandButton.enabled = false;
     controller.miniButton.enabled = false;
@@ -197,42 +203,53 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
     controller.containerView.layer.removeAnimationForKey(PANEL_CORNER_ANIMATION_KEY);
     controller.miniContainerView.layer.removeAnimationForKey(PANEL_CORNER_ANIMATION_KEY);
 
-    _fm.applyRootFrame(controller, toFrame, true);
-    refreshWebPanelLayout(controller);
-
-    var positionAnimation = CABasicAnimation.animationWithKeyPath("position");
-    positionAnimation.fromValue = frameCenter(fromFrame);
-    positionAnimation.toValue = frameCenter(toFrame);
-    positionAnimation.duration = PANEL_TRANSITION_DURATION;
-    positionAnimation.timingFunction = CAMediaTimingFunction.functionWithName("easeInEaseOut");
-
-    var boundsAnimation = CABasicAnimation.animationWithKeyPath("bounds.size");
-    boundsAnimation.fromValue = { width: fromFrame.width, height: fromFrame.height };
-    boundsAnimation.toValue = { width: toFrame.width, height: toFrame.height };
-    boundsAnimation.duration = PANEL_TRANSITION_DURATION;
-    boundsAnimation.timingFunction = CAMediaTimingFunction.functionWithName("easeInEaseOut");
+    // ★ Fix: 用 NSTimer 步进插值替代 CABasicAnimation/CATransaction
+    //   CABasicAnimation.fromValue 类型 id→JSB 转 NSDictionary 而非 NSValue → 崩溃
+    //   CATransaction + frame 隐式动画 → 布局死锁
+    //   步进方案：~30fps, 8步, cubic easeInOut
+    controller._preferredFrame = toFrame;
 
     var targetSurface = controller._isMini ? controller.miniContainerView : controller.containerView;
-    var cornerAnimation = CABasicAnimation.animationWithKeyPath("cornerRadius");
-    cornerAnimation.fromValue = controller._isMini ? WINDOW_CORNER_RADIUS : 18;
-    cornerAnimation.toValue = targetSurface.layer.cornerRadius;
-    cornerAnimation.duration = PANEL_TRANSITION_DURATION;
-    cornerAnimation.timingFunction = CAMediaTimingFunction.functionWithName("easeInEaseOut");
+    var fromCorner = controller._isMini ? WINDOW_CORNER_RADIUS : 18;
+    var toCorner = targetSurface.layer.cornerRadius;
 
-    controller.view.layer.addAnimationForKey(positionAnimation, PANEL_POSITION_ANIMATION_KEY);
-    controller.view.layer.addAnimationForKey(boundsAnimation, PANEL_BOUNDS_ANIMATION_KEY);
-    targetSurface.layer.addAnimationForKey(cornerAnimation, PANEL_CORNER_ANIMATION_KEY);
+    var STEPS = 8;
+    var interval = PANEL_TRANSITION_DURATION / STEPS;
 
-    NSTimer.scheduledTimerWithTimeInterval(PANEL_TRANSITION_DURATION, false, function () {
-      controller.view.layer.removeAnimationForKey(PANEL_POSITION_ANIMATION_KEY);
-      controller.view.layer.removeAnimationForKey(PANEL_BOUNDS_ANIMATION_KEY);
-      targetSurface.layer.removeAnimationForKey(PANEL_CORNER_ANIMATION_KEY);
-      controller._isPanelTransitioning = false;
-      controller.miniExpandButton.enabled = true;
-      controller.miniButton.enabled = true;
-      refreshWebPanelLayout(controller);
-      if (completion) completion();
-    });
+    function easeInOut(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function tick(step) {
+      if (gen !== _transitionGen) return;
+      var progress = (step + 1) / STEPS;
+      var eased = easeInOut(progress);
+
+      var x = fromFrame.x + (toFrame.x - fromFrame.x) * eased;
+      var y = fromFrame.y + (toFrame.y - fromFrame.y) * eased;
+      var w = fromFrame.width + (toFrame.width - fromFrame.width) * eased;
+      var h = fromFrame.height + (toFrame.height - fromFrame.height) * eased;
+
+      controller.view.frame = { x: x, y: y, width: w, height: h };
+      targetSurface.layer.cornerRadius = fromCorner + (toCorner - fromCorner) * eased;
+
+      if (step + 1 >= STEPS) {
+        // 最后一帧：精确对齐目标值
+        controller.view.frame = toFrame;
+        targetSurface.layer.cornerRadius = toCorner;
+        controller._isPanelTransitioning = false;
+        controller.miniExpandButton.enabled = true;
+        controller.miniButton.enabled = true;
+        refreshWebPanelLayout(controller);
+        if (completion) completion();
+      } else {
+        NSTimer.scheduledTimerWithTimeInterval(interval, false, function () {
+          tick(step + 1);
+        });
+      }
+    }
+
+    tick(0);
   }
 
   function togglePanelMaximize(controller) {
