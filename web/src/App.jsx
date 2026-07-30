@@ -157,6 +157,7 @@ function SendArea({ loading, selectedCount, send, sendScope, setSendScope }) {
       <div className="scope-selector" role="radiogroup" aria-label="发送范围">
         <button className={`chip ${sendScope === "notebook" ? "active" : ""}`} onClick={() => setSendScope("notebook")} type="button">学习集</button>
         <button className={`chip ${sendScope === "mindmap" ? "active" : ""}`} onClick={() => setSendScope("mindmap")} type="button">当前脑图</button>
+        <button className={`chip ${sendScope === "card-tree" ? "active" : ""}`} onClick={() => setSendScope("card-tree")} type="button">卡片树</button>
         <button className={`chip ${sendScope === "selection" ? "active" : ""}`} onClick={() => setSendScope("selection")} type="button">{scopeSelectionLabel(selectedCount)}</button>
       </div>
 
@@ -272,7 +273,7 @@ export default function App() {
       const payload = message?.payload || {};
 
       if (action === "set-send-scope") {
-        if (!["selection", "mindmap", "notebook"].includes(payload.scope)) throw new Error(`不支持的发送范围: ${payload.scope}`);
+        if (!["selection", "mindmap", "notebook", "card-tree"].includes(payload.scope)) throw new Error(`不支持的发送范围: ${payload.scope}`);
         setSendScope(payload.scope);
         return;
       }

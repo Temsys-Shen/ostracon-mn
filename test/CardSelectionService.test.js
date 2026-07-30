@@ -12,6 +12,19 @@ function note(noteId, children = []) {
   return { noteId, childNotes: children, comments: [] };
 }
 
+function mindmapNode(noteId, frame, children = []) {
+  const node = {
+    note: { noteId, comments: [] },
+    frame,
+    parentNode: null,
+    childNodes: children,
+  };
+  children.forEach((child) => {
+    child.parentNode = node;
+  });
+  return node;
+}
+
 function createService(notes, title = "学习集") {
   const context = vm.createContext({
     Database: { sharedInstance: () => ({ getNotebookById: () => ({ title, notes }) }) },
@@ -47,6 +60,50 @@ describe("CardSelectionService selected-card info", () => {
       sourceTitle: "",
       noteIds: [],
     });
+  });
+});
+
+describe("CardSelectionService card-tree scope", () => {
+  test("collects selected cards and all descendants in visual order", () => {
+    const firstGrandchild = mindmapNode("first-grandchild", { x: 120, y: 300 });
+    const firstChild = mindmapNode("first-child", { x: 100, y: 200 }, [firstGrandchild]);
+    const firstRoot = mindmapNode("first-root", { x: 80, y: 100 }, [firstChild]);
+    const secondRoot = mindmapNode("second-root", { x: 40, y: 120 });
+    const selection = createSelectionInfoService([secondRoot, firstRoot])
+      .getScopeSelection({ addon: { window: {} } }, "card-tree").selection;
+
+    expect(selection.flatCards.map(card => card.noteId)).toEqual(["first-root", "second-root", "first-child", "first-grandchild"]);
+    expect(selection.treeCards.map(card => card.noteId)).toEqual(["first-root", "first-child", "first-grandchild", "second-root"]);
+    expect(selection.treeRoots.map(card => card.noteId)).toEqual(["first-root", "second-root"]);
+    expect(selection.treeRoots[0].children[0].children[0].noteId).toBe("first-grandchild");
+  });
+
+  test("deduplicates a selected descendant already collected by its parent", () => {
+    const child = mindmapNode("child", { x: 80, y: 200 });
+    const root = mindmapNode("root", { x: 80, y: 100 }, [child]);
+    const selection = createSelectionInfoService([root, child])
+      .getScopeSelection({ addon: { window: {} } }, "card-tree").selection;
+
+    expect(selection.flatCards.map(card => card.noteId)).toEqual(["root", "child"]);
+    expect(selection.treeRoots).toHaveLength(1);
+    expect(selection.treeRoots[0].children[0].noteId).toBe("child");
+  });
+
+  test("rejects cyclic card trees", () => {
+    const root = mindmapNode("root", { x: 80, y: 100 });
+    const child = mindmapNode("child", { x: 80, y: 200 });
+    root.childNodes = [child];
+    child.parentNode = root;
+    child.childNodes = [root];
+    root.parentNode = child;
+
+    expect(() => createSelectionInfoService([root]).getScopeSelection({ addon: { window: {} } }, "card-tree"))
+      .toThrow("卡片树层级存在循环: root");
+  });
+
+  test("rejects unknown scope types", () => {
+    expect(() => createSelectionInfoService([]).getScopeSelection({ addon: { window: {} } }, "unknown"))
+      .toThrow("未知发送范围: unknown");
   });
 });
 

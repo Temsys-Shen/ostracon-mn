@@ -447,6 +447,10 @@ var __MN_WEB_API_MNOstraconAddon = (function () {
       _mini.handleMenuCommand(self, "send-selection");
     },
 
+    nativeMiniSetSendCardTree: function () {
+      _mini.handleMenuCommand(self, "send-card-tree");
+    },
+
     nativeMiniSetSendMindmap: function () {
       _mini.handleMenuCommand(self, "send-mindmap");
     },

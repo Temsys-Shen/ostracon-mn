@@ -92,6 +92,28 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return 0;
   }
 
+  function rawNodeOrder(node, fallbackIndex) {
+    const frame = node && node.frame ? node.frame : {};
+    return [getFrameValue(frame, "y"), getFrameValue(frame, "x"), fallbackIndex];
+  }
+
+  function compareOrderKeys(left, right) {
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) return left[index] - right[index];
+    }
+    return 0;
+  }
+
+  function sortRawNodes(nodes) {
+    return nodes.map(function (node, index) {
+      return { node, order: rawNodeOrder(node, index) };
+    }).sort(function (left, right) {
+      return compareOrderKeys(left.order, right.order);
+    }).map(function (entry) {
+      return entry.node;
+    });
+  }
+
   function buildSelectedNode(node, selectionIndex) {
     const note = node && node.note ? node.note : null;
     if (!note || !note.noteId) return null;
@@ -315,6 +337,31 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  function collectSelectedSubtrees(context) {
+    const selectedNodes = sortRawNodes(arrayFromNSArray(getSelectedViews(context)).map(resolveNode).filter(Boolean));
+    if (selectedNodes.length === 0) throw new Error("未选中卡片");
+
+    const collected = [];
+    const visited = {};
+    const visiting = {};
+
+    function visit(node) {
+      if (!node || !node.note || !node.note.noteId) throw new Error("卡片树节点缺少noteId");
+      const noteId = String(node.note.noteId);
+      if (visiting[noteId]) throw new Error("卡片树层级存在循环: " + noteId);
+      if (visited[noteId]) return;
+
+      visiting[noteId] = true;
+      collected.push(node);
+      sortRawNodes(arrayFromNSArray(node.childNodes)).forEach(visit);
+      delete visiting[noteId];
+      visited[noteId] = true;
+    }
+
+    selectedNodes.forEach(visit);
+    return collected;
+  }
+
   function getSelectedCardsInternal(context, allowEmpty) {
     const items = arrayFromNSArray(getSelectedViews(context));
     const indexed = indexSelectedNodes(items, allowEmpty);
@@ -432,17 +479,28 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  function getCurrentCardTreeScope(context) {
+    return {
+      id: "card-tree",
+      title: "卡片树",
+      selection: selectionFromMindmapNodes(collectSelectedSubtrees(context)),
+    };
+  }
+
   function getScopeSelection(context, scopeType, options) {
-    if (scopeType === "notebook") {
+    const scope = scopeType === undefined || scopeType === null || scopeType === "" ? "selection" : String(scopeType);
+    if (scope === "notebook") {
       var notebookId = options && options.notebookId ? String(options.notebookId) : "";
       return notebookId ? getNotebookScopeById(notebookId) : getCurrentNotebookScope(context);
     }
-    if (scopeType === "mindmap") return getCurrentMindmapScope(context);
-    return {
+    if (scope === "mindmap") return getCurrentMindmapScope(context);
+    if (scope === "card-tree") return getCurrentCardTreeScope(context);
+    if (scope === "selection") return {
       id: "selection",
       title: "选中卡片",
       selection: getSelectedCards(context),
     };
+    throw new Error("未知发送范围: " + scope);
   }
 
   function listScopeCards(context, scopeType, options) {

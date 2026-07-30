@@ -121,13 +121,13 @@ describe("App panel mode", () => {
     render(<App />);
 
     await act(async () => {
-      await window.__OstraconNativeMiniAction(JSON.stringify({ action: "set-send-scope", payload: { scope: "notebook" } }));
+      await window.__OstraconNativeMiniAction(JSON.stringify({ action: "set-send-scope", payload: { scope: "card-tree" } }));
     });
     await act(async () => {
       await window.__OstraconNativeMiniAction(JSON.stringify({ action: "send", payload: {} }));
     });
 
-    expect(mocks.send).toHaveBeenCalledWith({ scope: "notebook" });
+    expect(mocks.send).toHaveBeenCalledWith({ scope: "card-tree" });
   });
 
   test("selects a native quote file before inserting it", async () => {

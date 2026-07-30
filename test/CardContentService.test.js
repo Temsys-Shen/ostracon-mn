@@ -447,8 +447,12 @@ describe("CardContentService", () => {
       ],
     };
     const selection = selectionFor(note);
+    const scopes = [];
     Object.assign(context.__MN_CARD_SELECTION_SERVICE_MNOstraconAddon, {
-      getScopeSelection() { return { id: "selection", title: "选中卡片", selection }; },
+      getScopeSelection(_context, scope) {
+        scopes.push(scope);
+        return { id: scope, title: "选中卡片", selection };
+      },
       getCardsByIds() { return selection; },
       listCardsByIds() { return [{ id: note.noteId, title: "标题", comment: "正文" }]; },
     });
@@ -458,6 +462,10 @@ describe("CardContentService", () => {
     const commands = context.__MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon;
     const sent = commands.previewScopeMarkdown({}, {
       scope: "selection",
+      options: { cardTitlePolicy: CONTENT_TITLE_POLICY },
+    });
+    commands.previewScopeMarkdown({}, {
+      scope: "card-tree",
       options: { cardTitlePolicy: CONTENT_TITLE_POLICY },
     });
     const fetched = commands.fetchCards({}, {
@@ -474,6 +482,7 @@ describe("CardContentService", () => {
     });
 
     expect(sent.markdown).toBe(fetched.markdown);
+    expect(scopes).toEqual(["selection", "card-tree"]);
     expect(sent.markdown).toContain("正文");
     expect(sent.markdown).toContain("data:image/png;base64,U0hBUkVE");
     expect(sent.markdown).toContain("data:image/svg+xml;base64,");

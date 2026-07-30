@@ -31,7 +31,7 @@ describe("useSend", () => {
     ostraconWsClient.sendPacket.mockResolvedValue({ payload: { record: { filePath: "Marginnote/Example.md" } } });
   });
 
-  test.each(["selection", "notebook"])("sends the %s scope as Markdown", async (scope) => {
+  test.each(["selection", "notebook", "card-tree"])("sends the %s scope as Markdown", async (scope) => {
     MNBridge.send
       .mockResolvedValueOnce({ markdown: "# Example", noteCount: 2, fileBaseName: "Example", scopeTitle: "Example" })
       .mockResolvedValueOnce({ cards: [{ id: "card-1", title: "Example" }] });
@@ -117,6 +117,7 @@ describe("isSendDisabled", () => {
     expect(isSendDisabled(false, "selection", 1)).toBe(false);
     expect(isSendDisabled(false, "mindmap", 0)).toBe(false);
     expect(isSendDisabled(false, "notebook", 0)).toBe(false);
+    expect(isSendDisabled(false, "card-tree", 0)).toBe(false);
     expect(isSendDisabled(true, "notebook", 3)).toBe(true);
   });
 });

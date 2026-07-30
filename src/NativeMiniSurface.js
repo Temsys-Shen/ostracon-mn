@@ -274,6 +274,7 @@ var __MN_NATIVE_MINI_SURFACE_MNOstraconAddon = (function () {
     showMenu(controller, controller.miniSendArrow, [
       { title: "来源", items: [
         { title: selectionTitle, checked: state.sendScope === "selection", selector: "nativeMiniSetSendSelection", disabled: state.selectedCount === 0 },
+        { title: "卡片树", checked: state.sendScope === "card-tree", selector: "nativeMiniSetSendCardTree" },
         { title: "当前脑图", checked: state.sendScope === "mindmap", selector: "nativeMiniSetSendMindmap" },
         { title: "当前学习集", checked: state.sendScope === "notebook", selector: "nativeMiniSetSendNotebook" },
       ] },
@@ -338,6 +339,7 @@ var __MN_NATIVE_MINI_SURFACE_MNOstraconAddon = (function () {
   function handleMenuCommand(controller, command) {
     var commands = {
       "send-selection": { action: "set-send-scope", payload: { scope: "selection" }, popover: "_nativeMiniPopover" },
+      "send-card-tree": { action: "set-send-scope", payload: { scope: "card-tree" }, popover: "_nativeMiniPopover" },
       "send-mindmap": { action: "set-send-scope", payload: { scope: "mindmap" }, popover: "_nativeMiniPopover" },
       "send-notebook": { action: "set-send-scope", payload: { scope: "notebook" }, popover: "_nativeMiniPopover" },
       "format-canvas": { action: "set-format", payload: { format: "canvas" }, popover: "_nativeMiniPopover" },

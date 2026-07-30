@@ -33,7 +33,7 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
 
   function normalizeScopeType(payload) {
     const scope = payload && payload.scope ? String(payload.scope) : "selection";
-    if (scope === "notebook" || scope === "mindmap") return scope;
+    if (scope === "notebook" || scope === "mindmap" || scope === "card-tree") return scope;
     return "selection";
   }
 

@@ -1,5 +1,5 @@
 function normalizeSendScope(scope) {
-  return scope === "notebook" || scope === "mindmap" ? scope : "selection";
+  return scope === "notebook" || scope === "mindmap" || scope === "card-tree" ? scope : "selection";
 }
 
 function isSendDisabled(loading, scope, selectedCount) {
