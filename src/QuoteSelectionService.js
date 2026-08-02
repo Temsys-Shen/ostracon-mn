@@ -3,6 +3,8 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
   const SELECTION_NOTIFICATION = "SelectionChanged";
   const EVT_SELECTION_CHANGED = "ostracon:selection-changed";
   const EVT_QUOTE_ROOT_CLEARED = "ostracon:quote-root-cleared";
+  // 选中卡片事件防抖：框选大量卡片时 SelectionChanged 会高频触发，静默 200ms 后才派发一次。
+  const SELECTION_EVENT_DEBOUNCE_SECONDS = 0.2;
 
   function studyController(context) {
     const targetWindow = context.addon && context.addon.window
@@ -138,6 +140,20 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     context.webController.webView.evaluateJavaScript(script, function () {});
   }
 
+  // 对 SelectionChanged 做尾部防抖：事件风暴期间只重置定时器，静默 200ms 后派发一次最终事件。
+  // 定时器挂在 context 上（与 _ostraconQuoteRoot 同模式），避免多窗口共享模块时互相覆盖。
+  function scheduleSelectionPush(context) {
+    const pending = context._ostraconSelectionTimer;
+    if (pending) pending.invalidate();
+    context._ostraconSelectionTimer = NSTimer.scheduledTimerWithTimeInterval(
+      SELECTION_EVENT_DEBOUNCE_SECONDS, false,
+      function () {
+        context._ostraconSelectionTimer = null;
+        pushWebEvent(context, EVT_SELECTION_CHANGED);
+      }
+    );
+  }
+
   function install(context) {
     const center = NSNotificationCenter.defaultCenter();
     center.removeObserverName(context, SELECTION_NOTIFICATION);
@@ -146,11 +162,16 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
   }
 
   function remove(context) {
+    const pending = context._ostraconSelectionTimer;
+    if (pending) {
+      pending.invalidate();
+      context._ostraconSelectionTimer = null;
+    }
     NSNotificationCenter.defaultCenter().removeObserverName(context, SELECTION_NOTIFICATION);
   }
 
   function handleSelectionChanged(context) {
-    pushWebEvent(context, EVT_SELECTION_CHANGED);
+    scheduleSelectionPush(context);
   }
 
   function handleNotebookClose(context) {
