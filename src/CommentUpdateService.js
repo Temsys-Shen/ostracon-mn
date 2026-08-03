@@ -179,6 +179,8 @@ var __MN_COMMENT_UPDATE_SERVICE_MNOstraconAddon = (function () {
       noteId: child ? String(child.noteId || "") : "",
       notebookId,
       title,
+      // 首次保存时 markdown 必非空（空内容已由 OB 端放弃），子卡片评论即 index 0
+      commentIndex: markdown ? 0 : -1,
     };
   }
 
