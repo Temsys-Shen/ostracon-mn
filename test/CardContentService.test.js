@@ -101,6 +101,41 @@ function multiRootSelection(notes) {
 }
 
 describe("CardContentService", () => {
+  test("extractTags 提取标签评论中的 #标签（LibMN 同款判定）", () => {
+    const context = createRuntime({});
+    const note = {
+      noteId: "note-tags",
+      noteTitle: "标题",
+      excerptText: "",
+      comments: [
+        { type: "TextNote", text: "#重要 #复习 标签评论", markdown: false },
+        { type: "TextNote", text: "普通评论带 #符号 不应误判", markdown: true },
+        { type: "TextNote", text: "#只有标签", markdown: false },
+        { type: "PaintNote", paint: "media" },
+      ],
+    };
+
+    const tags = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.extractTags(note);
+    expect(tags).toEqual(["重要", "复习", "只有标签"]);
+  });
+
+  test("extractTags 空标签/无标签评论返回空数组", () => {
+    const context = createRuntime({});
+    const note = {
+      noteId: "note-no-tags",
+      noteTitle: "",
+      excerptText: "",
+      comments: [
+        { type: "TextNote", text: "普通评论", markdown: true },
+        { type: "TextNote", text: "  #", markdown: false },
+        { type: "PaintNote", paint: "media" },
+      ],
+    };
+
+    const tags = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.extractTags(note);
+    expect(tags).toEqual([]);
+  });
+
   test("fetchCardBlocks 从 getCardsByIds 提取 note 并输出结构化块", () => {
     const note = {
       noteId: "note-x",

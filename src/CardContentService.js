@@ -393,9 +393,34 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  // 标签评论判定（与 LibMN MNUtil._isTagComment_ 一致）：TextNote 且文本以 #xxx 开头
+  function isTagComment(comment) {
+    if (comment && String(comment.type || "") === "TextNote") {
+      return /^#\S/.test(String(comment.text || ""));
+    }
+    return false;
+  }
+
+  // 提取卡片标签（复刻 LibMN MNComment.tags 思路）：从标签评论文本中取所有 #token 并去前缀
+  function extractTags(note) {
+    var comments = arrayFromNSArray(note.comments);
+    var tags = [];
+    for (var i = 0; i < comments.length; i++) {
+      var comment = comments[i];
+      if (!isTagComment(comment)) continue;
+      var tokens = String(comment.text || "").split(/\s+/).filter(function (k) { return k.startsWith("#"); });
+      for (var j = 0; j < tokens.length; j++) {
+        var tag = tokens[j].slice(1);
+        if (tag) tags.push(tag);
+      }
+    }
+    return tags;
+  }
+
   return {
     parseNote: parseNote,
     buildCardBlocks: buildCardBlocks,
+    extractTags: extractTags,
     resolveFileBaseName: resolveFileBaseName,
     resolveRootFileBaseName: resolveRootFileBaseName,
   };

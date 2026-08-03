@@ -533,18 +533,36 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return result;
   }
 
+  // 轻量摘要：不 parseNote、不读媒体（列表展示足够）；图片/手写角标用字段扫描近似判断
   function summarizeDbNote(note, titlePolicy) {
-    var content = __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note, titlePolicy);
+    var excerptText = String(note.excerptText || "");
+    var comments = arrayFromNSArray(note.comments);
+    var title = String(note.noteTitle || "").trim();
+    if (!title && titlePolicy && titlePolicy.useContentAsTitle) {
+      title = excerptText.split("\n").map(function (line) { return line.trim(); }).filter(Boolean)[0] || "";
+    }
+    var hasImage = false;
+    var hasHandwriting = false;
+    for (var i = 0; i < comments.length; i++) {
+      var comment = comments[i];
+      var type = comment ? String(comment.type || "") : "";
+      if (type === "PaintNote") {
+        hasImage = true;
+        if (comment && comment.drawing) hasHandwriting = true;
+      }
+    }
+    if (note.excerptPic) hasImage = true;
 
     return {
       id: String(note.noteId || ""),
-      title: content.title,
-      comment: content.commentText,
+      title: title,
+      comment: excerptText,
       sourceAnchor: "marginnote4app://note/" + String(note.noteId || ""),
       selected: false,
-      hasImage: content.hasImage,
-      hasHandwriting: content.hasHandwriting,
+      hasImage: hasImage,
+      hasHandwriting: hasHandwriting,
       colorIndex: typeof note.colorIndex === "number" ? Number(note.colorIndex) : undefined,
+      tags: __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.extractTags(note),
     };
   }
 
