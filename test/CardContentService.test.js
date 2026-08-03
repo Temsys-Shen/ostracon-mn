@@ -17,7 +17,7 @@ function loadSource(context, relativePath) {
   vm.runInContext(fs.readFileSync(filePath, "utf8"), context, { filename: filePath });
 }
 
-function createRuntime(mediaById = {}, logs = [], sketchByKey = {}) {
+function createRuntime(mediaById = {}, logs = [], sketchByKey = {}, notesById = {}) {
   const context = vm.createContext({
     console: { log: (...args) => logs.push(args.join(" ")), warn: console.warn, error: console.error },
     Database: {
@@ -39,6 +39,22 @@ function createRuntime(mediaById = {}, logs = [], sketchByKey = {}) {
       arrayFromNSArray(value) {
         return Array.isArray(value) ? value : [];
       },
+      getCardsByIds(cardIds) {
+        const cards = cardIds.map((noteId, index) => {
+          const note = notesById[String(noteId)];
+          if (!note) throw new Error("MN中未找到此卡片: " + noteId);
+          return {
+            note,
+            noteId: String(note.noteId || noteId),
+            selectionIndex: index,
+            x: 0,
+            y: index,
+            depth: 0,
+            children: [],
+          };
+        });
+        return { flatCards: cards, treeRoots: cards, treeCards: cards };
+      },
     },
   });
 
@@ -50,6 +66,7 @@ function createRuntime(mediaById = {}, logs = [], sketchByKey = {}) {
   loadSource(context, "src/CardContentService.js");
   loadSource(context, "src/MarkdownExportService.js");
   loadSource(context, "src/CanvasExportService.js");
+  loadSource(context, "src/BridgeCommandsContent.js");
   return context;
 }
 
@@ -84,6 +101,84 @@ function multiRootSelection(notes) {
 }
 
 describe("CardContentService", () => {
+  test("fetchCardBlocks 从 getCardsByIds 提取 note 并输出结构化块", () => {
+    const note = {
+      noteId: "note-x",
+      noteTitle: "标题",
+      excerptText: "摘录",
+      comments: [{ type: "TextNote", text: "评论", markdown: true }],
+    };
+    const context = createRuntime({}, [], {}, { "note-x": note });
+
+    const result = context.__MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.fetchCardBlocks(
+      {},
+      { cardIds: ["note-x"], cardTitlePolicy: CONTENT_TITLE_POLICY },
+    );
+    expect(result.noteId).toBe("note-x");
+    expect(result.blocks.some((b) => b.kind === "comment" && b.type === "text" && b.markdown)).toBe(true);
+  });
+
+  test("fetchCardBlocks 卡片不存在时抛错", () => {
+    const context = createRuntime({}, [], {}, {});
+    expect(() => context.__MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon.fetchCardBlocks(
+      {},
+      { cardIds: ["missing"], cardTitlePolicy: CONTENT_TITLE_POLICY },
+    )).toThrow("MN中未找到此卡片");
+  });
+
+  test("buildCardBlocks 输出结构化块（数字 markdown 标志、图片 dataURI、excerpt/comment 区分）", () => {
+    const context = createRuntime({ media: "cG5n" });
+    const note = {
+      noteId: "note-blocks",
+      noteTitle: "标题",
+      excerptText: "摘录文本",
+      comments: [
+        { type: "TextNote", text: "第一条评论", markdown: 1 },
+        { type: "TextNote", text: "第二条评论", markdown: true },
+        { type: "PaintNote", paint: "media" },
+      ],
+    };
+
+    const result = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.buildCardBlocks(note, CONTENT_TITLE_POLICY);
+    expect(result.noteId).toBe("note-blocks");
+    expect(result.title).toBe("标题");
+
+    const excerptBlocks = result.blocks.filter((b) => b.kind === "excerpt");
+    expect(excerptBlocks.length).toBeGreaterThanOrEqual(1);
+    expect(excerptBlocks[0]).toMatchObject({ kind: "excerpt", type: "text", text: "摘录文本", markdown: false });
+
+    const commentTextBlocks = result.blocks.filter((b) => b.kind === "comment" && b.type === "text");
+    expect(commentTextBlocks).toHaveLength(2);
+    // 数字 1 的 markdown 标志正确归一化为 true（与 listComments 判断一致）
+    expect(commentTextBlocks[0]).toMatchObject({ kind: "comment", type: "text", markdown: true, index: 0 });
+    expect(commentTextBlocks[1].markdown).toBe(true);
+
+    const imageBlocks = result.blocks.filter((b) => b.type === "image");
+    expect(imageBlocks).toHaveLength(1);
+    expect(imageBlocks[0]).toMatchObject({ kind: "comment", index: 2 });
+    expect(String(imageBlocks[0].dataURI)).toContain("data:image/png;base64,cG5n");
+  });
+
+  test("handles empty-text markdown comments without crashing", () => {
+    const context = createRuntime({});
+    const note = {
+      noteId: "note-empty-comment",
+      noteTitle: "标题",
+      excerptText: "",
+      comments: [
+        { type: "TextNote", text: "正常评论", markdown: true },
+        { type: "TextNote", text: "", markdown: true },
+        { type: "TextNote", text: "   ", markdown: true },
+      ],
+    };
+
+    const content = context.__MN_CARD_CONTENT_SERVICE_MNOstraconAddon.parseNote(note);
+    expect(content.title).toBe("标题");
+    const markdown = context.__MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon.buildMarkdown(selectionFor(note), { cardTemplate: OB_CARD_TEMPLATE }).markdown;
+    expect(markdown).toContain("正常评论");
+    expect(markdown).not.toContain("undefined");
+  });
+
   test("uses the first text line as title and preserves duplicate PaintNote comments", () => {
     const context = createRuntime({ media: "cG5n" });
     const note = {

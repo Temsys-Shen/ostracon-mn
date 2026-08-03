@@ -22,7 +22,14 @@ export const MN_CMD = {
   LIST_NOTEBOOKS: "listNotebooks",
   LIST_CARDS: "listCards",
   FETCH_CARDS: "fetchCards",
+  FETCH_CARD_BLOCKS: "fetchCardBlocks",
   OPEN_MARGIN_NOTE_URL: "openMarginNoteUrl",
+
+  // 评论读写（OB 编辑 MN 评论）
+  LIST_COMMENTS: "listComments",
+  UPDATE_COMMENT: "updateComment",
+  APPEND_COMMENT: "appendComment",
+  CREATE_CHILD_CARD: "createChildCard",
 
   // 引文
   GET_QUOTE_SELECTION: "getQuoteSelection",

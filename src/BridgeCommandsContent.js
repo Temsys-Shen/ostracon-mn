@@ -123,5 +123,18 @@ var __MN_BRIDGE_COMMANDS_CONTENT_MNOstraconAddon = (function () {
     };
   }
 
-  return { previewSelectedMarkdown, previewSelectedCanvas, previewScopeMarkdown, previewScopeCanvas, listScopeCards, fetchCards };
+  function fetchCardBlocks(context, payload) {
+    const cardIds = payload && Array.isArray(payload.cardIds) ? payload.cardIds.map(String) : [];
+    if (cardIds.length === 0) {
+      throw new Error("缺少要拉取的卡片");
+    }
+    const titlePolicy = __MN_OSTRACON_UTILS_MNOstraconAddon.normalizeCardTitlePolicy(payload && payload.cardTitlePolicy);
+    const selection = __MN_CARD_SELECTION_SERVICE_MNOstraconAddon.getCardsByIds(cardIds);
+    const flatCards = selection && selection.flatCards ? selection.flatCards : [];
+    const note = flatCards.length > 0 && flatCards[0].note ? flatCards[0].note : null;
+    if (!note) throw new Error("未找到卡片");
+    return __MN_CARD_CONTENT_SERVICE_MNOstraconAddon.buildCardBlocks(note, titlePolicy);
+  }
+
+  return { previewSelectedMarkdown, previewSelectedCanvas, previewScopeMarkdown, previewScopeCanvas, listScopeCards, fetchCards, fetchCardBlocks };
 })();

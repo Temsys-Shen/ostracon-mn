@@ -98,7 +98,15 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
 
   function tokenizeTextComment(noteId, comment, commentIndex) {
     var sourceText = normalizeText(comment.text);
-    if (!sourceText) return { items: [], title: "" };
+    if (!sourceText) {
+      return {
+        items: [],
+        title: "",
+        buildItems: function () {
+          return { items: [], commentText: "" };
+        },
+      };
+    }
 
     var images = [];
     var placeholderPrefix = "\u0000OSTRACON_IMAGE_";
@@ -136,7 +144,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
 
         while ((match = tokenPattern.exec(body)) !== null) {
           var before = normalizeText(body.slice(cursor, match.index));
-          if (before) items.push({ type: "text", text: before, markdown: comment.markdown === true, index: commentIndex });
+          if (before) items.push({ type: "text", text: before, markdown: comment.markdown === true || Number(comment.markdown) === 1, index: commentIndex });
           var image = images[Number(match[1])];
           var imageItem = createImageItem(noteId, image.mediaId, image.mimeType, "textComment", commentIndex, image.alt, false);
           if (imageItem) items.push(imageItem);
@@ -144,7 +152,7 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
         }
 
         var after = normalizeText(body.slice(cursor));
-        if (after) items.push({ type: "text", text: after, markdown: comment.markdown === true, index: commentIndex });
+        if (after) items.push({ type: "text", text: after, markdown: comment.markdown === true || Number(comment.markdown) === 1, index: commentIndex });
         return {
           items: items,
           commentText: normalizeText(body.replace(/\u0000OSTRACON_IMAGE_\d+\u0000/g, "")),
@@ -358,5 +366,37 @@ var __MN_CARD_CONTENT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
-  return { parseNote: parseNote, resolveFileBaseName: resolveFileBaseName, resolveRootFileBaseName: resolveRootFileBaseName };
+  function buildCardBlocks(note, rawTitlePolicy) {
+    const content = parseNote(note, rawTitlePolicy);
+    const blocks = content.comments.map(function (item) {
+      if (item.type === "image") {
+        return {
+          kind: item.index >= 0 ? "comment" : "excerpt",
+          type: "image",
+          index: item.index,
+          alt: item.alt || "",
+          dataURI: item.dataURI,
+        };
+      }
+      return {
+        kind: item.index >= 0 ? "comment" : "excerpt",
+        type: "text",
+        index: item.index,
+        text: item.text,
+        markdown: item.markdown === true,
+      };
+    });
+    return {
+      noteId: content.noteId,
+      title: content.title,
+      blocks: blocks,
+    };
+  }
+
+  return {
+    parseNote: parseNote,
+    buildCardBlocks: buildCardBlocks,
+    resolveFileBaseName: resolveFileBaseName,
+    resolveRootFileBaseName: resolveRootFileBaseName,
+  };
 })();

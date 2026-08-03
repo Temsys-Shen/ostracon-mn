@@ -129,6 +129,26 @@ const SERVER_COMMAND_HANDLERS = {
     }));
     self.sendResult(requestId, { ok: true, packet, noteCount: result.noteCount || packet.objects.length });
   },
+  async fetchCardBlocks(self, requestId, payload) {
+    const result = await MNBridge.send(MN_CMD.FETCH_CARD_BLOCKS, payload, 30000);
+    self.sendResult(requestId, result);
+  },
+  async listComments(self, requestId, payload) {
+    const result = await MNBridge.send(MN_CMD.LIST_COMMENTS, payload, 15000);
+    self.sendResult(requestId, result);
+  },
+  async updateComment(self, requestId, payload) {
+    const result = await MNBridge.send(MN_CMD.UPDATE_COMMENT, payload, 15000);
+    self.sendResult(requestId, result);
+  },
+  async appendComment(self, requestId, payload) {
+    const result = await MNBridge.send(MN_CMD.APPEND_COMMENT, payload, 15000);
+    self.sendResult(requestId, result);
+  },
+  async createChildCard(self, requestId, payload) {
+    const result = await MNBridge.send(MN_CMD.CREATE_CHILD_CARD, payload, 15000);
+    self.sendResult(requestId, result);
+  },
   async getQuoteSelection(self, requestId, payload) {
     const result = await MNBridge.send(
       MN_CMD.GET_QUOTE_SELECTION,

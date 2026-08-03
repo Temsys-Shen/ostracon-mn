@@ -16,6 +16,7 @@ JSB.require("BridgeCommandsContent");
 JSB.require("ObsidianCardImportService");
 JSB.require("ObsidianPdfImportService");
 JSB.require("MarginNoteUrlService");
+JSB.require("CommentUpdateService");
 JSB.require("FrameManager");
 JSB.require("BridgeDispatcher");
 JSB.require("NativeMiniSurface");
