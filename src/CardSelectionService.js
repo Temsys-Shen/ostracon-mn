@@ -534,18 +534,67 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
   }
 
   // 轻量摘要：不 parseNote、不读媒体（列表展示足够）；图片/手写角标用字段扫描近似判断
+  function normalizeSummaryText(value) {
+    return String(value || "").replace(/\r\n/g, "\n").trim();
+  }
+
+  function firstSummaryLine(value) {
+    return normalizeSummaryText(value).split("\n").map(function (line) { return line.trim(); }).filter(Boolean)[0] || "";
+  }
+
+  function removeFirstSummaryLine(value) {
+    var lines = normalizeSummaryText(value).split("\n");
+    var consumed = false;
+    return lines.filter(function (line) {
+      if (!consumed && line.trim()) {
+        consumed = true;
+        return false;
+      }
+      return true;
+    }).join("\n").trim();
+  }
+
+  function getLightCommentText(comment) {
+    if (!comment) return "";
+    var type = String(comment.type || "");
+    if (type === "TextNote") return normalizeSummaryText(comment.text);
+    if (type === "HtmlNote") return normalizeSummaryText(comment.text);
+    if (type === "LinkNote") {
+      var hasLinkedPicture = Boolean(comment.q_hpic);
+      var linkTextFirst = comment.textFirst === true || Number(comment.textFirst) === 1;
+      if (hasLinkedPicture && !linkTextFirst) return "";
+      return normalizeSummaryText(comment.q_htext);
+    }
+    return "";
+  }
+
   function summarizeDbNote(note, titlePolicy) {
-    var excerptText = String(note.excerptText || "");
+    var excerptText = normalizeSummaryText(note.excerptText);
     var comments = arrayFromNSArray(note.comments);
     var title = String(note.noteTitle || "").trim();
+    var commentTexts = [];
+    if (excerptText) commentTexts.push(excerptText);
     if (!title && titlePolicy && titlePolicy.useContentAsTitle) {
-      title = excerptText.split("\n").map(function (line) { return line.trim(); }).filter(Boolean)[0] || "";
+      title = firstSummaryLine(excerptText);
+      if (title && excerptText) {
+        commentTexts[0] = removeFirstSummaryLine(excerptText);
+      }
     }
     var hasImage = false;
     var hasHandwriting = false;
     for (var i = 0; i < comments.length; i++) {
       var comment = comments[i];
       var type = comment ? String(comment.type || "") : "";
+      var commentText = getLightCommentText(comment);
+      if (commentText) {
+        if (!title && titlePolicy && titlePolicy.useContentAsTitle) {
+          title = firstSummaryLine(commentText);
+          var remaining = removeFirstSummaryLine(commentText);
+          if (remaining) commentTexts.push(remaining);
+        } else {
+          commentTexts.push(commentText);
+        }
+      }
       if (type === "PaintNote") {
         hasImage = true;
         if (comment && comment.drawing) hasHandwriting = true;
@@ -556,7 +605,7 @@ var __MN_CARD_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return {
       id: String(note.noteId || ""),
       title: title,
-      comment: excerptText,
+      comment: commentTexts.filter(Boolean).join("\n\n"),
       sourceAnchor: "marginnote4app://note/" + String(note.noteId || ""),
       selected: false,
       hasImage: hasImage,

@@ -28,6 +28,7 @@ function mindmapNode(noteId, frame, children = []) {
 function createService(notes, title = "学习集") {
   const context = vm.createContext({
     Database: { sharedInstance: () => ({ getNotebookById: () => ({ title, notes }) }) },
+    __MN_CARD_CONTENT_SERVICE_MNOstraconAddon: { extractTags: () => [] },
   });
   const source = fs.readFileSync(path.join(rootDir, "src/CardSelectionService.js"), "utf8");
   vm.runInContext(source, context, { filename: "CardSelectionService.js" });
@@ -181,5 +182,47 @@ describe("CardSelectionService notebook scope", () => {
     const first = note("first", [child]);
     const second = note("second", [child]);
     expect(() => createService([first, second, child]).getScopeSelection({}, "notebook", { notebookId: "nb" })).toThrow("学习集卡片存在多个上级: child");
+  });
+});
+
+describe("CardSelectionService database summaries", () => {
+  test("uses first text comment as the title and keeps remaining text as comment for untitled cards", () => {
+    const root = note("untitled");
+    root.comments = [{ type: "TextNote", text: "评论标题\n评论正文第一行\n评论正文第二行" }];
+
+    const cards = createService([root]).listAllCards({}, "nb", { useContentAsTitle: true });
+
+    expect(cards).toMatchObject([{
+      id: "untitled",
+      title: "评论标题",
+      comment: "评论正文第一行\n评论正文第二行",
+    }]);
+  });
+
+  test("keeps text, html, and text-first link comments in titled database summaries", () => {
+    const root = note("titled");
+    root.noteTitle = "显式标题";
+    root.excerptText = "摘录正文";
+    root.comments = [
+      { type: "TextNote", text: "普通评论" },
+      { type: "HtmlNote", text: "HTML评论" },
+      { type: "LinkNote", q_htext: "链接评论", textFirst: true },
+    ];
+
+    const cards = createService([root]).listAllCards({}, "nb", { useContentAsTitle: true });
+
+    expect(cards[0]).toMatchObject({
+      title: "显式标题",
+      comment: "摘录正文\n\n普通评论\n\nHTML评论\n\n链接评论",
+    });
+  });
+
+  test("does not use linked picture OCR text when LinkNote textFirst is disabled", () => {
+    const root = note("linked-picture");
+    root.comments = [{ type: "LinkNote", q_hpic: { paint: "image" }, q_htext: "不应显示", textFirst: false }];
+
+    const cards = createService([root]).listAllCards({}, "nb", { useContentAsTitle: true });
+
+    expect(cards[0]).toMatchObject({ title: "", comment: "" });
   });
 });
