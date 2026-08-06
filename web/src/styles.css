@@ -590,8 +590,8 @@ button:focus-visible, input:focus-visible {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 4px 12px 12px;
   overflow: auto;
 }
 
@@ -622,6 +622,21 @@ button:focus-visible, input:focus-visible {
 .quote-preview.image img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
 .quote-empty { flex-direction: column; gap: 8px; color: var(--subtle); }
 
+.quote-group {
+  flex: 0 0 auto;
+  padding: 9px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.quote-group-title {
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--subtle);
+  letter-spacing: .02em;
+}
+
 .quote-actions {
   display: grid;
   flex: 0 0 auto;
@@ -642,27 +657,36 @@ button:focus-visible, input:focus-visible {
   color: var(--ink);
   font-weight: 650;
 }
-.quote-actions button:first-child { border-color: var(--accent); background: var(--accent); color: #fff; }
+.quote-actions button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .quote-actions button:hover:not(:disabled) { border-color: #9cbaf5; background: var(--accent-soft); color: var(--accent-strong); }
-.quote-actions button:first-child:hover:not(:disabled) { background: var(--accent-strong); color: #fff; }
+.quote-actions button.primary:hover:not(:disabled) { background: var(--accent-strong); color: #fff; }
 .quote-actions button:disabled { cursor: default; opacity: .4; }
 .quote-actions button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quote-actions button svg { flex: 0 0 auto; }
 
-.quote-continuous {
+.quote-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
   display: flex;
-  min-height: 42px;
+  min-height: 40px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 7px;
-  padding: 6px 8px 6px 10px;
-  border-top: 1px solid var(--line);
+  gap: 8px;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--bg);
 }
-.quote-continuous > div { min-width: 0; flex: 1; }
-.quote-continuous small, .quote-continuous strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quote-continuous small { color: var(--subtle); font-size: 10px; }
-.quote-continuous strong { margin-top: 3px; font-size: 12px; }
-.quote-continuous button {
+.quote-toolbar-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; }
+.quote-toolbar-status { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 6px; }
+.quote-toolbar-status > div { min-width: 0; flex: 1; }
+.quote-toolbar small, .quote-toolbar strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-toolbar small { color: var(--subtle); font-size: 10px; }
+.quote-toolbar strong { margin-top: 2px; font-size: 12px; }
+.quote-toolbar strong.active { color: var(--accent-strong); }
+.quote-toolbar-sep { width: 1px; height: 16px; flex: 0 0 auto; background: var(--line); }
+.quote-toolbar-actions { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 6px; }
+.quote-toolbar-actions button {
   display: flex;
   min-width: 0;
   height: 30px;
@@ -675,27 +699,85 @@ button:focus-visible, input:focus-visible {
   color: var(--ink);
   font-weight: 650;
 }
-.quote-continuous button:first-of-type { border-color: var(--accent); background: var(--accent); color: #fff; }
-.quote-continuous button:disabled { cursor: default; opacity: .4; }
-.quote-continuous button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quote-continuous button svg, .quote-continuous-check { flex: 0 0 auto; }
-.quote-continuous-check { color: var(--accent-strong); }
+.quote-toolbar-actions button:first-of-type { border-color: var(--accent); background: var(--accent); color: #fff; }
+.quote-toolbar-actions button:hover:not(:disabled) { border-color: #9cbaf5; background: var(--accent-soft); color: var(--accent-strong); }
+.quote-toolbar-actions button:first-of-type:hover:not(:disabled) { background: var(--accent-strong); color: #fff; }
+.quote-toolbar-actions button:disabled { cursor: default; opacity: .4; }
+.quote-toolbar-actions button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-toolbar-actions button svg { flex: 0 0 auto; }
+.quote-continuous-check { flex: 0 0 auto; color: var(--accent-strong); }
+.quote-toolbar-secondary { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.quote-citation-open {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+.quote-citation-open:hover:not(:disabled) { border-color: #9cbaf5; background: var(--accent-soft); color: var(--accent-strong); }
+.quote-citation-open:disabled { cursor: default; opacity: .4; }
+.quote-citation-open svg { flex: 0 0 auto; }
 
 .quote-root-setting {
   display: flex;
-  min-height: 48px;
+  min-height: 36px;
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 10px;
-  border-top: 1px solid var(--line);
 }
 .quote-root-setting > div { min-width: 0; flex: 1; }
-.quote-root-setting small, .quote-root-setting strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quote-root-setting small { color: var(--subtle); font-size: 10px; }
-.quote-root-setting strong { margin-top: 3px; font-size: 12px; }
+.quote-root-setting strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .quote-root-setting > button:not(.icon-button) { height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-weight: 650; }
 .quote-root-setting > button.waiting { border-color: #d39b34; background: #fff8e8; color: #8a5b00; }
+
+.quote-citation-dialog {
+  display: flex;
+  width: min(420px, 100%);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 40px rgba(21, 24, 32, .18);
+}
+.quote-citation-dialog > header { display: flex; min-height: 45px; flex: 0 0 auto; align-items: center; gap: 7px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.quote-citation-title { min-width: 0; flex: 1; }
+.quote-citation-title small, .quote-citation-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-citation-title small { color: var(--subtle); font-size: 10px; }
+.quote-citation-title strong { margin-top: 2px; font-size: 12px; }
+.quote-citation-dialog > .quote-citation-fields { margin: 12px; }
+.quote-citation-dialog .quote-citation-fields button { height: 32px; padding-inline: 14px; }
+.quote-citation-fields { display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; }
+.quote-citation-fields label { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.quote-citation-fields label span { color: var(--subtle); font-size: 10px; }
+.quote-citation-fields input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+.quote-citation-fields label:first-child input { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.quote-citation-fields label:nth-child(2) { flex: 0 0 86px; }
+.quote-citation-fields button {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 650;
+  font-size: 12px;
+}
+.quote-citation-fields button:disabled { cursor: default; opacity: .4; }
 
 .quote-inline-error {
   flex: 0 0 auto;
@@ -747,8 +829,11 @@ button:focus-visible, input:focus-visible {
   .connection-chip { max-width: 34%; }
   .quote-actions { gap: 4px; }
   .quote-actions button { height: 36px; gap: 3px; padding: 0 4px; font-size: 11px; }
-  .quote-continuous { gap: 4px; padding-inline: 6px; }
-  .quote-continuous button { gap: 3px; padding: 0 6px; font-size: 11px; }
+  .quote-toolbar { gap: 4px; padding-inline: 6px; }
+  .quote-toolbar-main { gap: 4px; }
+  .quote-toolbar-actions { gap: 4px; }
+  .quote-toolbar-actions button { gap: 3px; padding: 0 6px; font-size: 11px; }
+  .quote-citation-open { width: 28px; height: 28px; }
 }
 .history-ob-link:hover {
   background: #dfeaff;

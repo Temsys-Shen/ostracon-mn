@@ -13,10 +13,13 @@ function loadSource(context, relativePath) {
   vm.runInContext(fs.readFileSync(filePath, "utf8"), context, { filename: filePath });
 }
 
-function createNote(noteId, title) {
+function createNote(noteId, title, startPage, endPage, excerptText) {
   return {
     noteId,
     noteTitle: title,
+    startPage,
+    endPage,
+    excerptText: excerptText || "",
     comments: [],
     merged: [],
     merge(note) {
@@ -31,9 +34,9 @@ function createRuntime() {
   const deleted = [];
   const refreshes = [];
   const created = [
-    createNote("note-1", "第一段"),
-    createNote("note-2", "第二段"),
-    createNote("note-3", "第三段"),
+    createNote("note-1", "第一段", 1, 1, "第一段摘录文本"),
+    createNote("note-2", "第二段", undefined, undefined, "第二段摘录文本"),
+    createNote("note-3", "第三段", undefined, undefined, "第三段摘录文本"),
   ];
   created.forEach(note => { notes[note.noteId] = note; });
   let notebookId = "nb1";
@@ -54,6 +57,7 @@ function createRuntime() {
     },
   };
   const documentController = {
+    docMd5: "doc1",
     isSelectionText: true,
     selectionText: "选区",
     imageFromSelection() {
@@ -65,6 +69,7 @@ function createRuntime() {
       return note;
     },
   };
+  let citeMapping = null;
   const context = vm.createContext({
     console,
     Database: { sharedInstance: () => db },
@@ -84,6 +89,9 @@ function createRuntime() {
     },
     __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon: {
       loadPrefs: () => ({}),
+    },
+    __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon: {
+      getCiteKeyMappingForDoc: () => citeMapping,
     },
   });
 
@@ -106,6 +114,7 @@ function createRuntime() {
     deleted,
     refreshes,
     setNotebookId(value) { notebookId = value; },
+    setCiteMapping(citekey, pageOffset) { citeMapping = citekey ? { citekey, pageOffset } : null; },
   };
 }
 
@@ -121,7 +130,7 @@ describe("ContinuousQuoteService", () => {
     });
   });
 
-  test("merges later cards into the primary card and renders that card", () => {
+  test("renders merged content of all session cards and deletes the later cards", () => {
     const runtime = createRuntime();
     const service = runtime.service;
     service.startSession(runtime.context);
@@ -134,7 +143,6 @@ describe("ContinuousQuoteService", () => {
       cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
     });
 
-    expect(runtime.notes["note-1"].merged).toEqual(["note-2", "note-3"]);
     expect(runtime.deleted).toEqual(["note-2", "note-3"]);
     expect(runtime.notes["note-1"]).toBeDefined();
     expect(runtime.notes["note-2"]).toBeUndefined();
@@ -150,8 +158,64 @@ describe("ContinuousQuoteService", () => {
       title: "第一段",
       heading: "##",
     });
-    expect(result.quote.content).toContain("marginnote4app://note/note-2");
+    // 内容按所有会话卡片合并，且不因 useContentAsTitle 把摘录文本消费为标题而丢失
+    expect(result.quote.content).toContain("第一段摘录文本");
+    expect(result.quote.content).toContain("第二段摘录文本");
+    expect(result.quote.content).toContain("第三段摘录文本");
     expect(service.getState(runtime.context).active).toBe(false);
+  });
+
+  test("keeps the session active when the finished quote has no content", () => {
+    const runtime = createRuntime();
+    const service = runtime.service;
+    service.startSession(runtime.context);
+    runtime.notes["note-1"].excerptText = "";
+    service.addSelection(runtime.context);
+
+    expect(() => service.finishSession(runtime.context, {
+      cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+    })).toThrow("连续摘录内容为空");
+    expect(service.getState(runtime.context).active).toBe(true);
+  });
+
+  test("keeps the session active when finishing fails mid-way", () => {
+    const runtime = createRuntime();
+    const service = runtime.service;
+    service.startSession(runtime.context);
+    service.addSelection(runtime.context);
+    delete runtime.notes["note-1"];
+
+    expect(() => service.finishSession(runtime.context, {})).toThrow("连续摘录主卡不存在");
+    expect(service.getState(runtime.context).active).toBe(true);
+  });
+
+  test("injects citekey and offset-adjusted page into the finished quote", () => {
+    const runtime = createRuntime();
+    const service = runtime.service;
+    runtime.setCiteMapping("zhang2020", 10);
+    service.startSession(runtime.context);
+    service.addSelection(runtime.context);
+
+    const result = service.finishSession(runtime.context, {
+      cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+    });
+
+    expect(result.quote.citekey).toBe("zhang2020");
+    expect(result.quote.page).toBe("11");
+  });
+
+  test("keeps citation fields null when the document has no citekey mapping", () => {
+    const runtime = createRuntime();
+    const service = runtime.service;
+    service.startSession(runtime.context);
+    service.addSelection(runtime.context);
+
+    const result = service.finishSession(runtime.context, {
+      cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+    });
+
+    expect(result.quote.citekey).toBeNull();
+    expect(result.quote.page).toBeNull();
   });
 
   test("cancels by deleting every card created in the session", () => {

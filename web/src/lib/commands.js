@@ -43,6 +43,11 @@ export const MN_CMD = {
   FINISH_CONTINUOUS_QUOTE_SESSION: "finishContinuousQuoteSession",
   GET_CONTINUOUS_QUOTE_SESSION_STATE: "getContinuousQuoteSessionState",
 
+  // 文档 citekey 映射（BibTeX 引用）
+  GET_CITE_KEY_MAPPING: "getCiteKeyMapping",
+  SET_CITE_KEY_MAPPING: "setCiteKeyMapping",
+  GET_CURRENT_DOCUMENT_INFO: "getCurrentDocumentInfo",
+
   // Obsidian 文档导入（markdown/html）
   GET_OBSIDIAN_INSERT_CONTEXT: "getObsidianInsertContext",
   CREATE_IMPORT_SESSION: "createObsidianImportSession",

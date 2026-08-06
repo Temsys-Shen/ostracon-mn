@@ -29,30 +29,141 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return notebookId;
   }
 
+  // ── BibTeX 引用：文档信息 / 页码探测 / citekey 注入 ──────────────
+  // MN JS bridge 的字段名与官方 ObjC 头文件可能不一致，这里用候选列表探测，
+  // 首个非空字段生效；最终语义以 inspectCurrentDocument 实测输出为准。
+  function readFirstField(object, keys) {
+    if (!object) return undefined;
+    for (var index = 0; index < keys.length; index++) {
+      var value = object[keys[index]];
+      if (value !== undefined && value !== null) return value;
+    }
+    return undefined;
+  }
+
+  function currentDocumentInfo(context) {
+    const controller = documentController(context);
+    const document = readFirstField(controller, ["document", "doc"]) || null;
+    const docMd5 = readFirstField(controller, ["docMd5", "documentId", "docHash"]);
+    const docTitle = readFirstField(document, ["docTitle", "title"]) || readFirstField(controller, ["docTitle", "documentTitle"]);
+    return {
+      controller: controller,
+      document: document,
+      docMd5: docMd5 === undefined ? "" : String(docMd5),
+      docTitle: docTitle === undefined ? "" : String(docTitle),
+    };
+  }
+
+  // 选区/当前页探测：MN 实测只有 currPageNo（1起）可靠；0 起字段（currPageIndex 等）不做页码用，
+  // 避免字段缺失时误选导致页码差 1。
+  function selectionPageRange(controller) {
+    const raw = readFirstField(controller, ["currPageNo", "currentPageNo", "pageNo"]);
+    if (raw === undefined) return null;
+    const page = Number(raw);
+    if (!isFinite(page) || page < 0) return null;
+    return { start: page, end: page };
+  }
+
+  // 卡片/摘录页码：MbBookNote.startPage / endPage（官方字段，1起）
+  function notePageRange(note) {
+    if (!note) return null;
+    const start = readFirstField(note, ["startPage", "pageStart"]);
+    if (start === undefined) return null;
+    const s = Number(start);
+    if (!isFinite(s) || s < 0) return null;
+    const rawEnd = readFirstField(note, ["endPage", "pageEnd"]);
+    const e = rawEnd === undefined ? s : Number(rawEnd);
+    return { start: s, end: isFinite(e) ? e : s };
+  }
+
+  function formatPageNumber(start, end, offset) {
+    const s = start + offset;
+    const e = end + offset;
+    if (e > s) return String(s) + "-" + String(e);
+    return String(s);
+  }
+
+  // 给 selection（拉模式）或 quote（连续摘录推模式）注入 citekey + 页码。
+  // note 传卡片对象时用卡片页码，否则用选区/当前页。任何异常都降级为 null，不影响主流程。
+  function attachCitation(context, target, note) {
+    try {
+      const info = currentDocumentInfo(context);
+      const mapping = info.docMd5 ? __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.getCiteKeyMappingForDoc(info.docMd5) : null;
+      if (!mapping || !mapping.citekey) {
+        target.citekey = null;
+        target.page = null;
+        return target;
+      }
+      const offset = Number(mapping.pageOffset) || 0;
+      const range = note ? notePageRange(note) : selectionPageRange(info.controller);
+      target.citekey = String(mapping.citekey);
+      target.page = range ? formatPageNumber(range.start, range.end, offset) : null;
+    } catch (error) {
+      target.citekey = null;
+      target.page = null;
+    }
+    return target;
+  }
+
+  function getCurrentDocumentInfo(context) {
+    const info = currentDocumentInfo(context);
+    const mapping = info.docMd5 ? __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon.getCiteKeyMappingForDoc(info.docMd5) : null;
+    return {
+      docMd5: info.docMd5,
+      docTitle: info.docTitle,
+      citekey: mapping && mapping.citekey ? mapping.citekey : null,
+      pageOffset: mapping ? mapping.pageOffset : 0,
+    };
+  }
+
+  // 调试探测：输出当前文档控制器与关键字段的原始值，用于联调确认页码/文档ID 字段名与语义。
+  function inspectCurrentDocument(context) {
+    const info = currentDocumentInfo(context);
+    const controller = info.controller;
+    const probe = {};
+    ["docMd5", "documentId", "docHash", "currPageNo", "currentPageNo", "pageNo", "currPageIndex", "pageIndex", "selectionPageIndex", "selectionPageNumber", "selectionPageNo", "pageCount"].forEach(function (key) {
+      probe[key] = controller[key] === undefined ? undefined : controller[key];
+    });
+    const documentProbe = {};
+    ["docTitle", "title", "docMd5", "pageCount"].forEach(function (key) {
+      documentProbe[key] = info.document ? info.document[key] : undefined;
+    });
+    return {
+      docMd5: info.docMd5,
+      docTitle: info.docTitle,
+      controllerKeys: Object.keys(controller).sort().slice(0, 80),
+      probe: probe,
+      documentKeys: info.document ? Object.keys(info.document).sort().slice(0, 80) : [],
+      documentProbe: documentProbe,
+    };
+  }
+
   function captureSelection(context) {
     const controller = documentController(context);
     const imageData = controller.imageFromSelection();
     if (imageData === undefined) return null;
 
     if (controller.isSelectionText === true) {
-      return {
+      const selection = {
         kind: "text",
         text: String(controller.selectionText || ""),
         image: null,
         noteId: null,
         link: null,
       };
+      return attachCitation(context, selection);
     }
 
     const base64 = imageData.base64Encoding();
     if (!base64 || typeof base64 !== "string") throw new Error("图片选区编码失败");
-    return {
+    const selection = {
       kind: "image",
       text: null,
       image: { mime: "image/png", base64: base64 },
       noteId: null,
       link: null,
     };
+    return attachCitation(context, selection);
   }
 
   function createOrLocateCard(context, selection) {
@@ -194,5 +305,8 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     createCardFromCurrentSelection,
     selectQuoteRootFromCurrentSelection,
     clearQuoteRoot,
+    attachCitation,
+    getCurrentDocumentInfo,
+    inspectCurrentDocument,
   };
 })();

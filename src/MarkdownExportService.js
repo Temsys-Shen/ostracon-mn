@@ -167,17 +167,23 @@ var __MN_MARKDOWN_EXPORT_SERVICE_MNOstraconAddon = (function () {
     };
   }
 
+  // 渲染连续摘录的引文：支持 1..N 张卡片，内容按卡顺序拼接（用于连续摘录合并渲染）。
   function buildQuoteContent(selectionResult, rawOptions) {
     var options = normalizeOptions(rawOptions);
     var warnings = createWarningBag();
     var cards = getCardsByMode(selectionResult, options.mode);
-    if (cards.length !== 1) throw new Error("连续摘录只能渲染一张主卡");
-    var rendered = renderNote(cards[0], options, warnings);
+    if (cards.length === 0) throw new Error("连续摘录没有可渲染的卡片");
+    var first = renderNote(cards[0], options, warnings);
+    var parts = [first.content];
+    for (var index = 1; index < cards.length; index++) {
+      var renderedCard = renderNote(cards[index], options, warnings);
+      if (renderedCard.content) parts.push(renderedCard.content);
+    }
     return {
-      content: rendered.content,
-      link: rendered.link,
-      title: rendered.title,
-      heading: rendered.heading,
+      content: parts.filter(function (part) { return part.length > 0; }).join("\n\n"),
+      link: first.link,
+      title: first.title,
+      heading: first.heading,
       warnings: warnings.items,
     };
   }

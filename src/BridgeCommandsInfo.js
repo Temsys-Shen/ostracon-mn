@@ -74,5 +74,51 @@ var __MN_BRIDGE_COMMANDS_INFO_MNOstraconAddon = (function () {
     return { clientId: id };
   }
 
-  return { getWsSettings, setWsSettings, getMarkdownPreferences, setMarkdownPreferences, getSelectedCardsInfo, listNotebooks, listCards, getClientId, setClientId };
+  // ── 文档 citekey 映射（BibTeX 引用）────────────────────────────
+  const CITE_KEY_MAPPINGS_KEY = "mn_ostracon_citekeys";
+
+  // 结构: { [docMd5]: { citekey: string, pageOffset: number } }
+  function getCiteKeyMappings() {
+    const stored = __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.loadJsonObject(CITE_KEY_MAPPINGS_KEY, {});
+    return stored && typeof stored === "object" ? stored : {};
+  }
+
+  function getCiteKeyMappingForDoc(docMd5) {
+    const mappings = getCiteKeyMappings();
+    const entry = mappings[String(docMd5 || "")];
+    if (!entry || typeof entry !== "object") return null;
+    return {
+      citekey: typeof entry.citekey === "string" ? entry.citekey : "",
+      pageOffset: Number(entry.pageOffset) || 0,
+    };
+  }
+
+  function getCiteKeyMapping(context, payload) {
+    const docMd5 = payload && payload.docMd5 ? String(payload.docMd5) : "";
+    if (!docMd5) return null;
+    return getCiteKeyMappingForDoc(docMd5);
+  }
+
+  function setCiteKeyMapping(context, payload) {
+    const docMd5 = payload && payload.docMd5 ? String(payload.docMd5) : "";
+    if (!docMd5) throw new Error("缺少文档ID");
+    const citekey = payload && payload.citekey ? String(payload.citekey).trim() : "";
+    if (!citekey) throw new Error("citekey 不能为空");
+    const rawOffset = payload && payload.pageOffset !== undefined ? Number(payload.pageOffset) : 0;
+    const pageOffset = isFinite(rawOffset) ? rawOffset : 0;
+    const mappings = getCiteKeyMappings();
+    mappings[docMd5] = { citekey: citekey, pageOffset: pageOffset };
+    __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon.saveJsonObject(CITE_KEY_MAPPINGS_KEY, mappings);
+    return { docMd5: docMd5, citekey: citekey, pageOffset: pageOffset };
+  }
+
+  function getCurrentDocumentInfo(context) {
+    return __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.getCurrentDocumentInfo(context);
+  }
+
+  function inspectCurrentDocument(context) {
+    return __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon.inspectCurrentDocument(context);
+  }
+
+  return { getWsSettings, setWsSettings, getMarkdownPreferences, setMarkdownPreferences, getSelectedCardsInfo, listNotebooks, listCards, getClientId, setClientId, getCiteKeyMapping, setCiteKeyMapping, getCiteKeyMappingForDoc, getCurrentDocumentInfo, inspectCurrentDocument };
 })();

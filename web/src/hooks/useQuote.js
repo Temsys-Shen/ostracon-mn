@@ -23,8 +23,68 @@ function useQuote(active, setNotice) {
   const [busyTarget, setBusyTarget] = useState("");
   const [error, setError] = useState("");
   const [continuous, setContinuous] = useState({ active: false, notebookId: "", primaryNoteId: null, items: [] });
+  const [documentInfo, setDocumentInfo] = useState(null);
+  const [citationSaving, setCitationSaving] = useState(false);
   const rootCheckInFlight = useRef(false);
   const rootSelectionSession = useRef(0);
+
+  // 当前文档信息（docMd5/docTitle + 已配置的 citekey/pageOffset），选区变化时刷新
+  const refreshDocumentInfo = useCallback(async () => {
+    try {
+      const info = await MNBridge.send(MN_CMD.GET_CURRENT_DOCUMENT_INFO, null, 10000);
+      setDocumentInfo(info || null);
+      return info || null;
+    } catch (nextError) {
+      setDocumentInfo(null);
+      return null;
+    }
+  }, []);
+
+  // 操作失败后与 MN 端会话状态对齐：MN 端会话已丢失（如 finish 半途失败已清空）时，UI 退出"进行中"，避免卡死
+  const syncContinuousState = useCallback(async () => {
+    try {
+      const state = await MNBridge.send(MN_CMD.GET_CONTINUOUS_QUOTE_SESSION_STATE, null, 10000);
+      if (state) setContinuous(state);
+    } catch (nextError) {
+      // 读取失败时保持当前 UI，由用户决定
+    }
+  }, [setContinuous]);
+
+  useEffect(() => {
+    if (!active) return;
+    void refreshDocumentInfo();
+    window.addEventListener(EVT_SELECTION_CHANGED, refreshDocumentInfo);
+    return () => window.removeEventListener(EVT_SELECTION_CHANGED, refreshDocumentInfo);
+  }, [active, refreshDocumentInfo]);
+
+  // 保存当前文档的 citekey + 页码偏移映射
+  const saveCitation = useCallback(async (citekey, pageOffset) => {
+    const docMd5 = documentInfo && documentInfo.docMd5 ? documentInfo.docMd5 : "";
+    if (!docMd5) {
+      const message = "未打开文档，无法配置文献";
+      setNotice(message);
+      return null;
+    }
+    setCitationSaving(true);
+    try {
+      const saved = await MNBridge.send(MN_CMD.SET_CITE_KEY_MAPPING, {
+        docMd5,
+        citekey,
+        pageOffset: Number(pageOffset) || 0,
+      }, 10000);
+      if (saved) {
+        setDocumentInfo((prev) => (prev ? { ...prev, citekey: saved.citekey, pageOffset: saved.pageOffset } : prev));
+        setNotice("已保存文献引用");
+      }
+      return saved;
+    } catch (nextError) {
+      const message = normalizeError(nextError);
+      setNotice(message);
+      return null;
+    } finally {
+      setCitationSaving(false);
+    }
+  }, [documentInfo, setNotice]);
 
   useEffect(() => {
     if (!active) return;
@@ -177,11 +237,12 @@ function useQuote(active, setNotice) {
       const message = normalizeError(nextError);
       setError(message);
       setNotice(message);
+      void syncContinuousState();
       return null;
     } finally {
       setBusyTarget("");
     }
-  }, [setNotice]);
+  }, [setNotice, syncContinuousState]);
 
   const addContinuousSelection = useCallback(async () => {
     setBusyTarget("continuous-add");
@@ -195,11 +256,12 @@ function useQuote(active, setNotice) {
       const message = normalizeError(nextError);
       setError(message);
       setNotice(message);
+      void syncContinuousState();
       return null;
     } finally {
       setBusyTarget("");
     }
-  }, [setNotice]);
+  }, [setNotice, syncContinuousState]);
 
   const cancelContinuous = useCallback(async () => {
     setBusyTarget("continuous-cancel");
@@ -213,11 +275,12 @@ function useQuote(active, setNotice) {
       const message = normalizeError(nextError);
       setError(message);
       setNotice(message);
+      void syncContinuousState();
       return null;
     } finally {
       setBusyTarget("");
     }
-  }, [setNotice]);
+  }, [setNotice, syncContinuousState]);
 
   const finishContinuous = useCallback(async (target, filePath) => {
     const cardTitlePolicy = connection.lastHello?.payload?.cardTitlePolicy;
@@ -248,6 +311,7 @@ function useQuote(active, setNotice) {
       const message = normalizeError(nextError);
       setError(message);
       setNotice(message);
+      void syncContinuousState();
       return null;
     } finally {
       setBusyTarget("");
@@ -255,7 +319,7 @@ function useQuote(active, setNotice) {
         .then((ctx) => setSelection({ quoteContext: ctx }))
         .catch(() => { /* ignore */ });
     }
-  }, [connection.lastHello, setNotice, setSelection]);
+  }, [connection.lastHello, setNotice, setSelection, syncContinuousState]);
 
   return {
     selection,
@@ -265,6 +329,10 @@ function useQuote(active, setNotice) {
     continuous,
     busyTarget,
     error,
+    documentInfo,
+    citationSaving,
+    refreshDocumentInfo,
+    saveCitation,
     toggleRootSelection,
     clearRoot,
     insert,
