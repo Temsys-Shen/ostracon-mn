@@ -166,6 +166,25 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
     return attachCitation(context, selection);
   }
 
+  // 把摘录卡解析到当前学习集的实体：highlightFromSelection 返回的是文档笔记本的卡，
+  // 脑图显示的是学习集映射卡（不同 noteId）。noteId/link 应指向学习集实体，
+  // 否则发送到 OB 的回链会定位到文档而非脑图里的卡片。
+  function resolveNoteToView(note, notebookId) {
+    if (!note) return null;
+    try {
+      if (typeof note.realGroupNoteIdForTopicId === "function") {
+        const realId = note.realGroupNoteIdForTopicId(String(notebookId));
+        if (realId && String(realId) !== String(note.noteId || "")) {
+          const real = Database.sharedInstance().getNoteById(realId);
+          if (real) return real;
+        }
+      }
+    } catch (error) {
+      console.log("[OstraconQuote] 解析学习集实体失败（忽略）: " + String(error && error.message ? error.message : error));
+    }
+    return note;
+  }
+
   function createOrLocateCard(context, selection) {
     const notebookId = currentNotebookId(context);
     const state = context.addon._ostraconQuoteRoot || null;
@@ -178,15 +197,16 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
 
     const note = documentController(context).highlightFromSelection();
     if (!note || !note.noteId) throw new Error("MN未能从当前选区创建卡片");
+    const viewNote = resolveNoteToView(note, notebookId);
 
     if (root) {
       UndoManager.sharedInstance().undoGrouping("设置引文同级节点", notebookId, function () {
-        root.addChild(note);
+        root.addChild(viewNote);
       });
       Application.sharedInstance().refreshAfterDBChanged(notebookId);
     }
 
-    selection.noteId = String(note.noteId);
+    selection.noteId = String(viewNote.noteId);
     selection.link = "marginnote4app://note/" + selection.noteId;
     return selection;
   }
@@ -194,13 +214,15 @@ var __MN_QUOTE_SELECTION_SERVICE_MNOstraconAddon = (function () {
   function createCardFromCurrentSelection(context) {
     const selection = captureSelection(context);
     if (!selection) throw new Error("请先选择要加入连续摘录的内容");
+    const notebookId = currentNotebookId(context);
     const note = documentController(context).highlightFromSelection();
     if (!note || !note.noteId) throw new Error("MN未能从当前选区创建卡片");
-    selection.noteId = String(note.noteId);
+    const viewNote = resolveNoteToView(note, notebookId);
+    selection.noteId = String(viewNote.noteId);
     selection.link = "marginnote4app://note/" + selection.noteId;
     return {
-      notebookId: currentNotebookId(context),
-      note: note,
+      notebookId: notebookId,
+      note: viewNote,
       selection: selection,
     };
   }

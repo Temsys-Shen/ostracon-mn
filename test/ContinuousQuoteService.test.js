@@ -311,4 +311,38 @@ describe("ContinuousQuoteService", () => {
 
     expect(runtime.service.getState(runtime.context).active).toBe(false);
   });
+
+  test("continuous quote stores the study-set entity id instead of the document card id", () => {
+    const runtime = createRuntime();
+    const service = runtime.service;
+    runtime.notes["view-1"] = createNote("view-1", "第一段", 1, 1, "第一段摘录文本");
+    runtime.notes["view-2"] = createNote("view-2", "第二段", 1, 1, "第二段摘录文本");
+    runtime.notes["note-1"].realGroupNoteIdForTopicId = () => "view-1";
+    runtime.notes["note-2"].realGroupNoteIdForTopicId = () => "view-2";
+
+    service.startSession(runtime.context);
+    service.addSelection(runtime.context);
+    service.addSelection(runtime.context);
+
+    expect(service.getState(runtime.context).primaryNoteId).toBe("view-1");
+    expect(service.getState(runtime.context).items.map(i => i.noteId)).toEqual(["view-1", "view-2"]);
+
+    const result = service.finishSession(runtime.context, {
+      cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
+    });
+    expect(result.noteId).toBe("view-1");
+    expect(result.link).toBe("marginnote4app://note/view-1");
+    expect(runtime.notes["view-1"].merged).toEqual(["view-2"]);
+  });
+
+  test("non-continuous quote resolves the created card to the study-set entity", () => {
+    const runtime = createRuntime();
+    runtime.notes["view-1"] = createNote("view-1", "第一段", 1, 1, "第一段摘录文本");
+    runtime.notes["note-1"].realGroupNoteIdForTopicId = () => "view-1";
+
+    const result = runtime.quoteService.getQuoteSelection(runtime.context, { createCard: true });
+
+    expect(result.noteId).toBe("view-1");
+    expect(result.link).toBe("marginnote4app://note/view-1");
+  });
 });
