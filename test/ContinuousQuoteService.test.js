@@ -33,6 +33,21 @@ function createRuntime() {
   const notes = {};
   const deleted = [];
   const refreshes = [];
+  const posts = [];
+  const dirtyNotebooks = [];
+  const focusCalls = [];
+  const docFocusCalls = [];
+  const savedb = { count: 0 };
+  const mindmapState = {
+    nodes: [
+      { note: { noteId: "note-1" } },
+      { note: { noteId: "note-2" } },
+      { note: { noteId: "note-3" } },
+    ],
+  };
+  const mindmapView = {
+    mindmapNodes: mindmapState.nodes,
+  };
   const created = [
     createNote("note-1", "第一段", 1, 1, "第一段摘录文本"),
     createNote("note-2", "第二段", undefined, undefined, "第二段摘录文本"),
@@ -55,6 +70,12 @@ function createRuntime() {
     getSketchNoteForMindMapFocusNoteId() {
       return null;
     },
+    setNotebookSyncDirty(notebookId) {
+      dirtyNotebooks.push(notebookId);
+    },
+    savedb() {
+      savedb.count += 1;
+    },
   };
   const documentController = {
     docMd5: "doc1",
@@ -76,8 +97,13 @@ function createRuntime() {
     Application: {
       sharedInstance: () => ({
         studyController: () => ({
-          notebookController: { notebookId },
+          notebookController: {
+            notebookId,
+            mindmapView,
+          },
           readerController: { currentDocumentController: documentController },
+          focusNoteInMindMapById: (noteId) => focusCalls.push(noteId),
+          focusNoteInDocumentById: (noteId) => docFocusCalls.push(noteId),
         }),
         refreshAfterDBChanged: (nextNotebookId) => refreshes.push(nextNotebookId),
       }),
@@ -86,6 +112,14 @@ function createRuntime() {
       sharedInstance: () => ({
         undoGrouping: (_title, _topicId, fn) => fn(),
       }),
+    },
+    NSNotificationCenter: {
+      defaultCenter: () => ({
+        postNotificationNameObjectUserInfo: (name, object, userInfo) => posts.push({ name, object, userInfo }),
+      }),
+    },
+    NSTimer: {
+      scheduledTimerWithTimeInterval: (_interval, _repeat, block) => block(),
     },
     __MN_BRIDGE_COMMANDS_PERSISTENCE_MNOstraconAddon: {
       loadPrefs: () => ({}),
@@ -113,6 +147,12 @@ function createRuntime() {
     notes,
     deleted,
     refreshes,
+    posts,
+    dirtyNotebooks,
+    focusCalls,
+    docFocusCalls,
+    mindmapView,
+    savedb,
     setNotebookId(value) { notebookId = value; },
     setCiteMapping(citekey, pageOffset) { citeMapping = citekey ? { citekey, pageOffset } : null; },
   };
@@ -130,7 +170,7 @@ describe("ContinuousQuoteService", () => {
     });
   });
 
-  test("renders merged content of all session cards and deletes the later cards", () => {
+  test("renders merged content of all session cards and merges the later cards into the primary", () => {
     const runtime = createRuntime();
     const service = runtime.service;
     service.startSession(runtime.context);
@@ -143,10 +183,30 @@ describe("ContinuousQuoteService", () => {
       cardTitlePolicy: { useContentAsTitle: true, untitledTitle: "无标题卡片" },
     });
 
-    expect(runtime.deleted).toEqual(["note-2", "note-3"]);
-    expect(runtime.notes["note-1"]).toBeDefined();
-    expect(runtime.notes["note-2"]).toBeUndefined();
-    expect(runtime.notes["note-3"]).toBeUndefined();
+    // merge 只加 LinkNote + 设置子卡 groupnoteid，子卡由脑图按 groupnoteid 过滤隐藏，
+    // 绝不能删除子卡（删除会使 LinkNote 引用失效，聚合内容与图片全部丢失）
+    expect(runtime.notes["note-1"].merged).toEqual(["note-2", "note-3"]);
+    expect(runtime.deleted).toEqual([]);
+    expect(runtime.notes["note-2"]).toBeDefined();
+    expect(runtime.notes["note-3"]).toBeDefined();
+    // 立即收尾（标脏/保存 + refreshAfterDBChanged）+ 0.6s/1.2s 两轮通知刷新：
+    // RefreshAfterDBChange（object=当前 mindmapView）+ ReloadDigestNotes，最后定位脑图与文档主卡
+    expect(runtime.refreshes).toEqual(["nb1"]);
+    expect(runtime.dirtyNotebooks).toEqual(["nb1", "nb1", "nb1"]);
+    expect(runtime.savedb.count).toBe(3);
+    expect(runtime.posts).toHaveLength(4);
+    expect(runtime.posts[0]).toMatchObject({
+      name: "RefreshAfterDBChange",
+      object: runtime.mindmapView,
+      userInfo: { topicid: "nb1", note: runtime.notes["note-1"] },
+    });
+    expect(runtime.posts[1]).toMatchObject({
+      name: "ReloadDigestNotes",
+      object: null,
+      userInfo: { note: runtime.notes["note-1"], command: "modify" },
+    });
+    expect(runtime.focusCalls).toEqual(["note-1"]);
+    expect(runtime.docFocusCalls).toEqual(["note-1"]);
     expect(result).toMatchObject({
       noteId: "note-1",
       link: "marginnote4app://note/note-1",
